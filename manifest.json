@@ -1,0 +1,11 @@
+{
+	"id": "readability-compass",
+	"name": "Readability Compass",
+	"version": "0.1.0",
+	"minAppVersion": "1.7.2",
+	"description": "Know the reading level of your notes: language-independent LIX score with CEFR-style target bands, always-on status bar indicators, a detail panel and commands.",
+	"author": "Max Kloosterman",
+	"authorUrl": "https://github.com/maxonamission",
+	"fundingUrl": "https://buymeacoffee.com/maxonamission",
+	"isDesktopOnly": false
+}
