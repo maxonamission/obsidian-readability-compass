@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0]
+
+**Score a whole selection of notes — and see exactly where the hard spots are.**
+
+- **Explorer scoring** (new): select multiple notes (or right-click a folder) in the file
+  explorer → *Score readability*. The side panel shows one combined score over the whole
+  selection (computed over summed counts, so long notes weigh in properly), a per-note list
+  sorted hardest-first with each note's own target verdict, and the longest sentences across
+  all selected notes — click one to open that note right at that sentence. "Back to current
+  note" returns the panel to its usual behaviour.
+- **Hardest paragraphs** (new): the panel now also lists the highest-LIX paragraphs of the
+  note (paragraphs of 20+ words), click-to-jump — so you can start rewriting where it hurts
+  most, not just at the longest sentence.
+- **The longest-sentences list is yours now**: set how many entries the panel shows
+  (default 5), reveal the rest step by step with **Show more**, and optionally hide
+  sentences at or below a word threshold so the list only names real offenders.
+
 ## [0.2.1]
 
 **Selections across table cells now count every cell.** Live Preview renders tables as

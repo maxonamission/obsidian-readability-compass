@@ -152,3 +152,30 @@
 .rc-long-word {
 	border-bottom: 1px dotted var(--text-faint);
 }
+
+/* Explorer selection + list options (BC_E1_S10/S11/S12) */
+
+.rc-multi-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--size-4-2);
+}
+
+.rc-back-button,
+.rc-show-more {
+	font-size: var(--font-smaller);
+	padding: var(--size-2-1) var(--size-4-1);
+}
+
+.rc-show-more {
+	margin-top: var(--size-2-2);
+}
+
+.rc-multi-file {
+	cursor: pointer;
+}
+
+.rc-multi-file:hover .rc-count-label {
+	color: var(--text-accent);
+}

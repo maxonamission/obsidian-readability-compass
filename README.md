@@ -22,8 +22,14 @@ That's the whole entry fee. No account, no API key, nothing leaves your machine.
   segments. Select text and it scores the selection. Click it to open the panel.
 - **Side panel — the why behind the verdict**: a score card (LIX, band, indicative CEFR
   audience, target check), the published Flesch variant for your language (six supported),
-  counts (words, sentences, words per sentence, long words, paragraphs, reading time), and
-  your **longest sentences** — click one and you jump straight to the culprit.
+  counts (words, sentences, words per sentence, long words, paragraphs, reading time), your
+  **hardest paragraphs** (by LIX) and your **longest sentences** — click one and you jump
+  straight to the culprit. You choose how many entries the lists show, reveal more with
+  *Show more*, and can hide sentences below a word threshold.
+- **Score a folder or a selection of notes** — right-click in the file explorer: one combined
+  score over the selection, a per-note list sorted hardest-first (each note against its own
+  target), and the longest sentences across all of them — click to open that note at that
+  sentence.
 - **Five commands** — open the panel · score the current note · score the selection · insert
   a readability report at the cursor (as a callout) · toggle the status bar.
 

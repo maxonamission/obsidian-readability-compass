@@ -20,6 +20,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
+  TOP_LIST_CAP: () => TOP_LIST_CAP,
   default: () => ReadabilityCompassPlugin
 });
 module.exports = __toCommonJS(main_exports);
@@ -428,6 +429,48 @@ function fleschLabel(score) {
 
 // src/readability/analyze.ts
 var DEFAULT_TOP_SENTENCES = 5;
+var MIN_PARAGRAPH_WORDS = 20;
+function paragraphBlocks(clean) {
+  const blocks = [];
+  let offset = 0;
+  let start = -1;
+  let end = -1;
+  for (const line of clean.split("\n")) {
+    if (/\S/.test(line)) {
+      if (start === -1) start = offset;
+      end = offset + line.length;
+    } else if (start !== -1) {
+      blocks.push({ start, end });
+      start = -1;
+    }
+    offset += line.length + 1;
+  }
+  if (start !== -1) blocks.push({ start, end });
+  return blocks;
+}
+function topParagraphs(clean, count) {
+  const spans = [];
+  for (const block of paragraphBlocks(clean)) {
+    const text = clean.slice(block.start, block.end);
+    const words = extractWords(text);
+    if (words.length < MIN_PARAGRAPH_WORDS) continue;
+    const sentences = splitSentences(text);
+    const lix = lixScore(
+      words.length,
+      sentences.length,
+      words.filter(isLongWord).length
+    );
+    if (lix === null) continue;
+    spans.push({
+      start: block.start,
+      end: block.end,
+      text: text.trim().replace(/\s+/g, " "),
+      words: words.length,
+      lix
+    });
+  }
+  return spans.sort((a, b) => b.lix - a.lix).slice(0, count);
+}
 function analyzeMarkdown(markdown, options) {
   var _a;
   const strip = {
@@ -457,7 +500,8 @@ function analyzeMarkdown(markdown, options) {
       label: fleschLabel(score)
     };
   }
-  const topSentences = [...sentences].sort((a, b) => b.words - a.words).slice(0, (_a = options.topSentenceCount) != null ? _a : DEFAULT_TOP_SENTENCES);
+  const topCount = (_a = options.topSentenceCount) != null ? _a : DEFAULT_TOP_SENTENCES;
+  const topSentences = [...sentences].sort((a, b) => b.words - a.words).slice(0, topCount);
   return {
     words: wordCount,
     sentences: sentenceCount,
@@ -473,10 +517,33 @@ function analyzeMarkdown(markdown, options) {
     flesch,
     readingMinutes: wordCount / Math.max(1, options.wordsPerMinute),
     topSentences,
+    topParagraphs: topParagraphs(clean, topCount),
     onTarget: lix === null ? null : lix <= options.targetMaxLix,
     targetMaxLix: options.targetMaxLix,
     minWords: options.minWords,
     tablesIncluded: strip.includeTables === true
+  };
+}
+
+// src/readability/aggregate.ts
+function combineCounts(files, minWords, wordsPerMinute) {
+  const words = files.reduce((sum, file) => sum + file.words, 0);
+  const sentences = files.reduce((sum, file) => sum + file.sentences, 0);
+  const longWords = files.reduce((sum, file) => sum + file.longWords, 0);
+  const lix = words >= minWords ? lixScore(words, sentences, longWords) : null;
+  const ceilings = new Set(files.map((file) => file.maxLix));
+  const maxLix = ceilings.size === 1 ? files[0].maxLix : null;
+  return {
+    files: files.length,
+    words,
+    sentences,
+    longWords,
+    readingMinutes: words / Math.max(1, wordsPerMinute),
+    lix,
+    band: lix === null ? null : lixBand(lix),
+    cefr: lix === null ? null : cefrIndication(lix),
+    onTarget: lix === null || maxLix === null ? null : lix <= maxLix,
+    maxLix
   };
 }
 
@@ -813,6 +880,8 @@ var DEFAULT_SETTINGS = {
   includeTables: false,
   minWords: 40,
   wordsPerMinute: 225,
+  topSentencesShown: 5,
+  sentenceMinWords: 0,
   showStatusBar: true,
   statusBar: {
     lix: true,
@@ -897,6 +966,30 @@ var ReadabilityCompassSettingTab = class extends import_obsidian2.PluginSettingT
       (value) => `${value} words`,
       async (value) => {
         this.plugin.settings.minWords = value;
+        await this.plugin.saveSettings();
+      }
+    );
+    this.addLabelledSlider(
+      new import_obsidian2.Setting(containerEl).setName("Longest sentences and hardest paragraphs shown").setDesc(
+        "How many entries the panel lists at first; Show more reveals the rest in steps."
+      ),
+      { min: 3, max: 25, step: 1 },
+      () => this.plugin.settings.topSentencesShown,
+      (value) => `top ${value}`,
+      async (value) => {
+        this.plugin.settings.topSentencesShown = value;
+        await this.plugin.saveSettings();
+      }
+    );
+    this.addLabelledSlider(
+      new import_obsidian2.Setting(containerEl).setName("Only list sentences above").setDesc(
+        "Sentences at or below this word count stay out of the longest-sentences list. 0 lists regardless of length."
+      ),
+      { min: 0, max: 40, step: 1 },
+      () => this.plugin.settings.sentenceMinWords,
+      (value) => value === 0 ? "off" : `${value} words`,
+      async (value) => {
+        this.plugin.settings.sentenceMinWords = value;
         await this.plugin.saveSettings();
       }
     );
@@ -1047,6 +1140,7 @@ var ReadabilityCompassSettingTab = class extends import_obsidian2.PluginSettingT
 // src/panel.ts
 var import_obsidian3 = require("obsidian");
 var VIEW_TYPE_READABILITY = "readability-compass-panel";
+var SHOW_MORE_STEP = 10;
 var LANGUAGE_LABEL = {
   unknown: "language unknown \u2014 LIX only"
 };
@@ -1057,6 +1151,11 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
+    /** Extra list entries revealed via "Show more"; resets when the subject changes. */
+    this.extraEntries = 0;
+    this.renderedSubject = null;
+    /** Last render inputs, so "Show more" can re-render in place. */
+    this.lastRender = null;
   }
   getViewType() {
     return VIEW_TYPE_READABILITY;
@@ -1071,8 +1170,20 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
     this.plugin.refreshUi();
     return Promise.resolve();
   }
+  listBudget() {
+    return this.plugin.settings.topSentencesShown + this.extraEntries;
+  }
+  resetForSubject(subject) {
+    if (this.renderedSubject !== subject) {
+      this.renderedSubject = subject;
+      this.extraEntries = 0;
+    }
+  }
+  // --- Single note ----------------------------------------------------------
   render(report, fileName, target = null) {
     var _a, _b, _c;
+    this.resetForSubject(`file:${fileName != null ? fileName : ""}`);
+    this.lastRender = () => this.render(report, fileName, target);
     const root = this.contentEl;
     root.empty();
     root.addClass("rc-panel");
@@ -1132,27 +1243,159 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
     row("Long words (>6 letters)", `${report.longWords} (${formatPercent(report.longWordRatio)})`);
     row("Paragraphs", String(report.paragraphs));
     row("Reading time", formatReadingTime(report.readingMinutes));
-    const offenders = report.topSentences.filter((s) => s.words >= 2);
-    if (offenders.length > 0) {
-      root.createDiv({ text: "Longest sentences", cls: "rc-section-title" });
-      const list = root.createEl("ol", { cls: "rc-sentences" });
-      for (const sentence of offenders) {
-        const item = list.createEl("li", { cls: "rc-sentence" });
-        item.createSpan({ text: `${sentence.words} w \xB7 `, cls: "rc-sentence-words" });
-        item.createSpan({ text: truncate(sentence.text, 140) });
-        item.setAttribute("title", "Click to jump to this sentence");
-        this.registerDomEvent(item, "click", () => {
-          this.jumpTo(sentence);
-        });
-      }
-    }
+    this.renderParagraphs(root, report.topParagraphs);
+    this.renderSentences(
+      root,
+      report.topSentences,
+      (span) => this.plugin.jumpToSpan(span),
+      null
+    );
     root.createEl("p", {
       text: report.tablesIncluded ? "Measured on running text incl. tables \u2014 front matter, code, links and URLs are excluded." : "Measured on running text \u2014 front matter, code, tables, links and URLs are excluded.",
       cls: "rc-footnote"
     });
   }
-  jumpTo(sentence) {
-    this.plugin.jumpToSpan(sentence);
+  // --- Explorer selection (BC_E1_S10) ----------------------------------------
+  renderMulti(multi) {
+    var _a, _b;
+    this.resetForSubject(`multi:${multi.rows.map((r) => r.file.path).join("|")}`);
+    this.lastRender = () => this.renderMulti(multi);
+    const root = this.contentEl;
+    root.empty();
+    root.addClass("rc-panel");
+    const header = root.createDiv({ cls: "rc-file rc-multi-header" });
+    header.createSpan({ text: `${multi.combined.files} notes` });
+    const back = header.createEl("button", {
+      text: "Back to current note",
+      cls: "rc-back-button"
+    });
+    this.registerDomEvent(back, "click", () => this.plugin.clearMultiReport());
+    const combined = multi.combined;
+    const card = root.createDiv({ cls: "rc-card" });
+    if (combined.lix === null) {
+      card.createDiv({ text: "\u2013", cls: "rc-score" });
+      card.createDiv({
+        text: "Too little text in this selection for a stable score.",
+        cls: "rc-hint"
+      });
+    } else {
+      card.createDiv({ text: formatLixValue(combined.lix), cls: "rc-score" });
+      card.createDiv({ text: "LIX (combined)", cls: "rc-score-label" });
+      card.createDiv({
+        text: `${(_a = combined.band) != null ? _a : ""} \xB7 ${(_b = combined.cefr) != null ? _b : ""}`,
+        cls: "rc-band"
+      });
+      if (combined.onTarget !== null && combined.maxLix !== null) {
+        const onTarget = combined.onTarget;
+        card.createDiv({
+          text: onTarget ? `\u2713 on target (max ${combined.maxLix})` : `\u25B2 above target (max ${combined.maxLix})`,
+          cls: onTarget ? "rc-target rc-target-ok" : "rc-target rc-target-off"
+        });
+      } else {
+        card.createDiv({
+          text: "Notes have different targets \u2014 see the per-note marks below.",
+          cls: "rc-target-source"
+        });
+      }
+    }
+    const counts = root.createDiv({ cls: "rc-counts" });
+    const row = (label, value) => {
+      const el = counts.createDiv({ cls: "rc-count-row" });
+      el.createSpan({ text: label, cls: "rc-count-label" });
+      el.createSpan({ text: value, cls: "rc-count-value" });
+    };
+    row("Words", String(combined.words));
+    row("Sentences", String(combined.sentences));
+    row("Reading time", formatReadingTime(combined.readingMinutes));
+    root.createDiv({ text: "Notes (hardest first)", cls: "rc-section-title" });
+    const list = root.createDiv({ cls: "rc-multi-files" });
+    for (const entry of multi.rows) {
+      const item = list.createDiv({ cls: "rc-count-row rc-multi-file" });
+      item.createSpan({ text: entry.file.basename, cls: "rc-count-label" });
+      const mark = entry.onTarget === null ? "" : entry.onTarget ? " \u2713" : " \u25B2";
+      item.createSpan({
+        text: entry.lix === null ? `${entry.words} w \xB7 \u2013` : `${entry.words} w \xB7 LIX ${formatLixValue(entry.lix)}${mark}`,
+        cls: "rc-count-value"
+      });
+      item.setAttribute("title", "Click to open this note");
+      this.registerDomEvent(item, "click", () => {
+        void this.plugin.jumpToFileSpan(entry.file, { start: 0, end: 0 });
+      });
+    }
+    this.renderSentences(
+      root,
+      multi.sentences.map((entry) => entry.span),
+      (_span, index) => {
+        const entry = this.visibleMultiSentences(multi)[index];
+        void this.plugin.jumpToFileSpan(entry.file, entry.span);
+      },
+      (index) => {
+        var _a2, _b2;
+        return (_b2 = (_a2 = this.visibleMultiSentences(multi)[index]) == null ? void 0 : _a2.file.basename) != null ? _b2 : null;
+      }
+    );
+    root.createEl("p", {
+      text: "Combined over the selected notes; per-note targets apply to the marks.",
+      cls: "rc-footnote"
+    });
+  }
+  visibleMultiSentences(multi) {
+    const minWords = this.plugin.settings.sentenceMinWords;
+    return multi.sentences.filter((entry) => entry.span.words > Math.max(1, minWords));
+  }
+  // --- Shared list sections ---------------------------------------------------
+  renderParagraphs(root, paragraphs) {
+    if (paragraphs.length === 0) return;
+    const budget = this.listBudget();
+    root.createDiv({ text: "Hardest paragraphs", cls: "rc-section-title" });
+    const list = root.createEl("ol", { cls: "rc-sentences" });
+    for (const paragraph of paragraphs.slice(0, budget)) {
+      const item = list.createEl("li", { cls: "rc-sentence" });
+      item.createSpan({
+        text: `LIX ${formatLixValue(paragraph.lix)} \xB7 ${paragraph.words} w \xB7 `,
+        cls: "rc-sentence-words"
+      });
+      item.createSpan({ text: truncate(paragraph.text, 140) });
+      item.setAttribute("title", "Click to jump to this paragraph");
+      this.registerDomEvent(item, "click", () => {
+        this.plugin.jumpToSpan(paragraph);
+      });
+    }
+    this.renderShowMore(root, paragraphs.length - budget);
+  }
+  renderSentences(root, sentences, onClick, fileLabel) {
+    const minWords = Math.max(1, this.plugin.settings.sentenceMinWords);
+    const offenders = sentences.filter((span) => span.words > minWords);
+    if (offenders.length === 0) return;
+    const budget = this.listBudget();
+    root.createDiv({ text: "Longest sentences", cls: "rc-section-title" });
+    const list = root.createEl("ol", { cls: "rc-sentences" });
+    offenders.slice(0, budget).forEach((sentence, index) => {
+      const item = list.createEl("li", { cls: "rc-sentence" });
+      const label = fileLabel == null ? void 0 : fileLabel(index);
+      item.createSpan({
+        text: `${sentence.words} w \xB7 ${label !== null && label !== void 0 ? `${label} \xB7 ` : ""}`,
+        cls: "rc-sentence-words"
+      });
+      item.createSpan({ text: truncate(sentence.text, 140) });
+      item.setAttribute("title", "Click to jump to this sentence");
+      this.registerDomEvent(item, "click", () => {
+        onClick(sentence, index);
+      });
+    });
+    this.renderShowMore(root, offenders.length - budget);
+  }
+  renderShowMore(root, hidden) {
+    if (hidden <= 0) return;
+    const button = root.createEl("button", {
+      text: `Show more (${hidden} hidden)`,
+      cls: "rc-show-more"
+    });
+    this.registerDomEvent(button, "click", () => {
+      var _a;
+      this.extraEntries += SHOW_MORE_STEP;
+      (_a = this.lastRender) == null ? void 0 : _a.call(this);
+    });
   }
 };
 function truncate(text, max) {
@@ -1160,6 +1403,7 @@ function truncate(text, max) {
 }
 
 // src/main.ts
+var TOP_LIST_CAP = 50;
 var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
@@ -1169,6 +1413,8 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     this.lastMarkdownView = null;
     /** Mutable container for registerEditorExtension; contents swap on settings changes. */
     this.editorExtensions = [];
+    /** When set, the panel shows this explorer selection instead of the active note. */
+    this.multiReport = null;
   }
   async onload() {
     await this.loadSettings();
@@ -1186,6 +1432,25 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     this.addCommands();
     this.registerEditorExtension(this.editorExtensions);
     this.syncEditorExtensions();
+    this.registerEvent(
+      this.app.workspace.on("files-menu", (menu, files) => {
+        const notes = this.markdownFiles(files);
+        if (notes.length < 2) return;
+        menu.addItem(
+          (item) => item.setTitle(`Score readability of ${notes.length} notes`).setIcon("gauge").onClick(() => void this.scoreFiles(notes))
+        );
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        if (!(file instanceof import_obsidian4.TFolder)) return;
+        const notes = this.markdownFiles([file]);
+        if (notes.length === 0) return;
+        menu.addItem(
+          (item) => item.setTitle(`Score readability of folder (${notes.length} notes)`).setIcon("gauge").onClick(() => void this.scoreFiles(notes))
+        );
+      })
+    );
     const refreshSoon = (0, import_obsidian4.debounce)(() => this.refreshUi(), 400, true);
     const refreshStatusSoon = (0, import_obsidian4.debounce)(() => this.refreshStatusBar(), 200, true);
     this.registerEvent(
@@ -1260,7 +1525,8 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
       minWords: this.settings.minWords,
       wordsPerMinute: this.settings.wordsPerMinute,
       targetMaxLix: target.maxLix,
-      includeTables: this.includeTablesFor(file)
+      includeTables: this.includeTablesFor(file),
+      topSentenceCount: TOP_LIST_CAP
     };
   }
   /** A manual selection means "measure this" — tables and code included. */
@@ -1366,9 +1632,80 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     const fileName = (_b = (_a = view == null ? void 0 : view.file) == null ? void 0 : _a.basename) != null ? _b : null;
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_READABILITY)) {
       if (leaf.view instanceof ReadabilityPanelView) {
-        leaf.view.render(report, fileName, target);
+        if (this.multiReport !== null) {
+          leaf.view.renderMulti(this.multiReport);
+        } else {
+          leaf.view.render(report, fileName, target);
+        }
       }
     }
+  }
+  // --- Multi-note scoring (BC_E1_S10) ---------------------------------------
+  /** Markdown files in the selection, folders expanded recursively. */
+  markdownFiles(selection) {
+    const notes = [];
+    const walk = (item) => {
+      if (item instanceof import_obsidian4.TFile) {
+        if (item.extension === "md") notes.push(item);
+      } else if (item instanceof import_obsidian4.TFolder) {
+        for (const child of item.children) walk(child);
+      }
+    };
+    for (const item of selection) walk(item);
+    return notes;
+  }
+  async scoreFiles(files) {
+    const rows = [];
+    const sentences = [];
+    const counts = [];
+    for (const file of files) {
+      const content = await this.app.vault.cachedRead(file);
+      const target = this.resolveTargetFor(file);
+      const report = analyzeMarkdown(content, {
+        ...this.analyzeOptions(target, file),
+        topSentenceCount: TOP_LIST_CAP
+      });
+      rows.push({
+        file,
+        words: report.words,
+        lix: report.lix,
+        onTarget: report.onTarget
+      });
+      counts.push({
+        words: report.words,
+        sentences: report.sentences,
+        longWords: report.longWords,
+        maxLix: target.maxLix
+      });
+      for (const span of report.topSentences) sentences.push({ file, span });
+    }
+    rows.sort((a, b) => {
+      var _a, _b;
+      return ((_a = b.lix) != null ? _a : 0) - ((_b = a.lix) != null ? _b : 0);
+    });
+    sentences.sort((a, b) => b.span.words - a.span.words);
+    this.multiReport = {
+      combined: combineCounts(
+        counts,
+        this.settings.minWords,
+        this.settings.wordsPerMinute
+      ),
+      rows,
+      sentences: sentences.slice(0, TOP_LIST_CAP)
+    };
+    await this.activatePanel();
+  }
+  /** Leave the explorer-selection view and follow the active note again. */
+  clearMultiReport() {
+    this.multiReport = null;
+    this.refreshUi();
+  }
+  /** Open a note (reusing its leaf when already open) and select a span. */
+  async jumpToFileSpan(file, span) {
+    const leaf = this.app.workspace.getLeaf(false);
+    await leaf.openFile(file);
+    const view = leaf.view instanceof import_obsidian4.MarkdownView ? leaf.view : null;
+    if (view !== null) this.selectSpanIn(view, span);
   }
   // --- Panel handling -----------------------------------------------------
   async activatePanel() {
@@ -1383,10 +1720,13 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     await workspace.revealLeaf(leaf);
     this.refreshUi();
   }
-  /** Jump the last active editor to a sentence span (offsets are document offsets). */
+  /** Jump the last active editor to a span (offsets are document offsets). */
   jumpToSpan(span) {
     const view = this.activeMarkdownView();
     if (view === null) return;
+    this.selectSpanIn(view, span);
+  }
+  selectSpanIn(view, span) {
     const editor = view.editor;
     const length = editor.getValue().length;
     const from = editor.offsetToPos(Math.min(span.start, length));
