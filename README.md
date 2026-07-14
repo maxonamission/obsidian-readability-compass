@@ -40,7 +40,10 @@ A compass, not a co-author:
 
 - **Only running text counts.** Front matter, code blocks, inline code, tables, link URLs,
   images, HTML and tags are stripped before measuring — without losing positions, so
-  jump-to-sentence lands exactly.
+  jump-to-sentence lands exactly. Notes that *are* tables (question banks, glossaries) can
+  opt in: turn on **Include table text**, or set `readability-tables: true` in a note's
+  front matter. A manual selection always measures everything you selected — tables and
+  code included.
 - **One published, inspectable formula:**
 
   ```
@@ -63,9 +66,17 @@ A compass, not a co-author:
   Flesch-Douma (nl), Flesch-Amstad (de), Fernández-Huerta (es), Kandel-Moles (fr),
   Flesch-Martins (pt). Their syllable counts are heuristic (±1 on tricky clusters); LIX stays
   the main score.
+  **Missing your language?**
+  [Open a language request](https://github.com/maxonamission/obsidian-readability-compass/issues/new?title=Language%20request%3A%20&labels=language-request&body=%2A%2ALanguage%2A%2A%3A%20%0A%2A%2APublished%20readability%20formula%20for%20this%20language%20(if%20you%20know%20one%2C%20with%20a%20reference)%2A%2A%3A%20%0A%2A%2AAnything%20special%20about%20syllables%2Fword%20boundaries%20in%20this%20language%2A%2A%3A%20)
+  — adding one is a single entry in the language registry (a stopword set, a syllable counter
+  and published formula coefficients). LIX itself already works for your language today if it
+  separates words with spaces.
 - **Known limitations, stated.** Sentence splitting is punctuation- and line-based
   (abbreviations like "e.g." count as sentence ends), and LIX assumes space-separated words —
-  it is not meaningful for CJK text.
+  it is not meaningful for CJK text. Keyword-style notes (slide decks, bullet lists of long
+  content words without connecting prose) score deceptively high: every line counts as a
+  sentence and the long-word share dominates. LIX is meant for running prose — turn on
+  **Mark long words** to see exactly which words drive such a score.
 
 ## Privacy — what leaves your machine
 

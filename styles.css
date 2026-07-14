@@ -105,3 +105,50 @@
 	font-size: var(--font-smaller);
 	margin-top: var(--size-4-3);
 }
+
+/* Target profiles (BC_E1_S4) */
+
+.rc-target-source {
+	color: var(--text-muted);
+	font-size: var(--font-smaller);
+	margin-top: var(--size-2-1);
+}
+
+.rc-rule-row .setting-item-info {
+	display: none;
+}
+
+.rc-rule-row .setting-item-control {
+	justify-content: flex-start;
+	flex-wrap: wrap;
+}
+
+.rc-rule-lix {
+	width: 5em;
+}
+
+/* Inline long-sentence marking (BC_E1_S5) — subtle, theme-proof tints. */
+
+.rc-long-sentence {
+	background-color: rgba(var(--color-yellow-rgb), 0.14);
+	border-radius: var(--radius-s);
+}
+
+.rc-very-long-sentence {
+	background-color: rgba(var(--color-red-rgb), 0.12);
+}
+
+/* Owner-test round 1 (BC_E1_S8) */
+
+.rc-slider-value {
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+	min-width: 4.5em;
+	text-align: right;
+}
+
+.rc-long-word {
+	text-decoration: underline dotted;
+	text-decoration-color: var(--text-faint);
+	text-underline-offset: 0.15em;
+}

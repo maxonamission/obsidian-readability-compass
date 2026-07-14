@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => ReadabilityCompassPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/readability/strip-markdown.ts
 function blank(match) {
@@ -39,6 +39,7 @@ var WIKILINK_RE = /\[\[([^\]|]*)\]\]/g;
 var FOOTNOTE_REF_RE = /\[\^[^\]]*\]/g;
 var INLINE_CODE_RE = /`[^`\n]*`/g;
 var TABLE_ROW_RE = /^[^\S\n]*\|.*\|[^\S\n]*$/gm;
+var TABLE_SEPARATOR_RE = /^[^\S\n]*\|(?:[^\S\n]*:?-+:?[^\S\n]*\|)+[^\S\n]*$/gm;
 var HTML_RE = /<[^>\n]+>/g;
 var URL_RE = /https?:\/\/\S+/g;
 var TAG_RE = /(^|[\s([])#[\p{L}\p{N}_/-]+/gmu;
@@ -47,9 +48,13 @@ var CALLOUT_MARKER_RE = /\[![\w-]+\][+-]?/g;
 var BLOCKQUOTE_RE = /^[^\S\n]{0,3}>[^\S\n]?/gm;
 var LIST_MARKER_RE = /^[^\S\n]{0,3}(?:[-*+]|\d+\.)[^\S\n]+/gm;
 var EMPHASIS_RE = /[*_~=]/g;
-function stripMarkdown(text) {
+function stripMarkdown(text, options = {}) {
   let t = text.replace(FRONT_MATTER_RE, blank);
-  t = t.replace(FENCE_RE, blank);
+  if (options.includeCode === true) {
+    t = t.replace(FENCE_RE, (block) => block.replace(/(?:```|~~~)[^\n]*/g, blank));
+  } else {
+    t = t.replace(FENCE_RE, blank);
+  }
   t = t.replace(COMMENT_RE, blank);
   t = t.replace(IMAGE_RE, blank);
   t = t.replace(LINK_RE, (m, label) => {
@@ -61,8 +66,17 @@ function stripMarkdown(text) {
   });
   t = t.replace(WIKILINK_RE, (_m, target) => `  ${target}  `);
   t = t.replace(FOOTNOTE_REF_RE, blank);
-  t = t.replace(INLINE_CODE_RE, blank);
-  t = t.replace(TABLE_ROW_RE, blank);
+  if (options.includeCode === true) {
+    t = t.replace(INLINE_CODE_RE, (code) => code.replace(/`/g, " "));
+  } else {
+    t = t.replace(INLINE_CODE_RE, blank);
+  }
+  if (options.includeTables === true) {
+    t = t.replace(TABLE_SEPARATOR_RE, blank);
+    t = t.replace(TABLE_ROW_RE, (row) => row.replace(/\|/g, " "));
+  } else {
+    t = t.replace(TABLE_ROW_RE, blank);
+  }
   t = t.replace(HTML_RE, blank);
   t = t.replace(URL_RE, blank);
   t = t.replace(TAG_RE, (m, lead) => lead + blank(m.slice(lead.length)));
@@ -416,7 +430,11 @@ function fleschLabel(score) {
 var DEFAULT_TOP_SENTENCES = 5;
 function analyzeMarkdown(markdown, options) {
   var _a;
-  const clean = stripMarkdown(markdown);
+  const strip = {
+    includeTables: options.includeTables === true,
+    includeCode: options.includeCode === true
+  };
+  const clean = stripMarkdown(markdown, strip);
   const words = extractWords(clean);
   const sentences = splitSentences(clean);
   const wordCount = words.length;
@@ -457,11 +475,236 @@ function analyzeMarkdown(markdown, options) {
     topSentences,
     onTarget: lix === null ? null : lix <= options.targetMaxLix,
     targetMaxLix: options.targetMaxLix,
-    minWords: options.minWords
+    minWords: options.minWords,
+    tablesIncluded: strip.includeTables === true
   };
 }
 
+// src/readability/target-profile.ts
+var DIATAXIS_TARGETS = {
+  tutorial: "b1",
+  "how-to": "b2",
+  howto: "b2",
+  reference: "b2",
+  explanation: "b2"
+};
+var FRONTMATTER_KEY = "readability-target";
+var BAND_VALUES = new Set(Object.keys(TARGET_MAX_LIX));
+function ruleTarget(rule) {
+  return {
+    maxLix: targetMaxLix(rule.band, rule.customMaxLix),
+    band: rule.band
+  };
+}
+function normalizeTag(tag) {
+  return tag.replace(/^#/, "").toLowerCase();
+}
+function tagMatches(ruleTag, noteTag) {
+  return noteTag === ruleTag || noteTag.startsWith(ruleTag + "/");
+}
+function normalizeFolder(pattern) {
+  return pattern.replace(/^\/+/, "").replace(/\/+$/, "");
+}
+function folderMatches(folder, path) {
+  return path.startsWith(folder + "/");
+}
+function parseFrontmatterTarget(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return { maxLix: value, band: "custom" };
+  }
+  if (typeof value !== "string") return null;
+  const text = value.trim().toLowerCase();
+  if (BAND_VALUES.has(text)) {
+    const band = text;
+    return { maxLix: TARGET_MAX_LIX[band], band };
+  }
+  const numeric = Number(text);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return { maxLix: numeric, band: "custom" };
+  }
+  return null;
+}
+function resolveTarget(context, settings) {
+  var _a, _b;
+  const global = {
+    maxLix: targetMaxLix(settings.globalBand, settings.globalCustomMaxLix),
+    band: settings.globalBand,
+    source: "global",
+    detail: null
+  };
+  if (context === null) return global;
+  const explicit = parseFrontmatterTarget((_a = context.frontmatter) == null ? void 0 : _a[FRONTMATTER_KEY]);
+  if (explicit !== null) {
+    return { ...explicit, source: "note", detail: FRONTMATTER_KEY };
+  }
+  if (settings.deriveFromDiataxis) {
+    const diataxis = (_b = context.frontmatter) == null ? void 0 : _b["diataxis"];
+    if (typeof diataxis === "string") {
+      const band = DIATAXIS_TARGETS[diataxis.trim().toLowerCase()];
+      if (band !== void 0) {
+        return {
+          maxLix: TARGET_MAX_LIX[band],
+          band,
+          source: "diataxis",
+          detail: `diataxis: ${diataxis.trim().toLowerCase()}`
+        };
+      }
+    }
+  }
+  const noteTags = context.tags.map(normalizeTag);
+  for (const rule of settings.tagRules) {
+    const ruleTag = normalizeTag(rule.pattern.trim());
+    if (ruleTag === "") continue;
+    if (noteTags.some((tag) => tagMatches(ruleTag, tag))) {
+      return { ...ruleTarget(rule), source: "tag", detail: `#${ruleTag}` };
+    }
+  }
+  let bestFolder = null;
+  for (const rule of settings.folderRules) {
+    const folder = normalizeFolder(rule.pattern.trim());
+    if (folder === "") continue;
+    if (!folderMatches(folder, context.path)) continue;
+    if (bestFolder === null || folder.length > bestFolder.folder.length) {
+      bestFolder = { rule, folder };
+    }
+  }
+  if (bestFolder !== null) {
+    return {
+      ...ruleTarget(bestFolder.rule),
+      source: "folder",
+      detail: `${bestFolder.folder}/`
+    };
+  }
+  return global;
+}
+
+// src/editor-highlight.ts
+var import_state = require("@codemirror/state");
+var import_view = require("@codemirror/view");
+var import_obsidian = require("obsidian");
+
+// src/readability/highlight.ts
+function longSentenceThreshold(maxLix) {
+  return Math.max(8, Math.round(maxLix * 0.55));
+}
+function verySentenceThreshold(thresholdWords) {
+  return Math.round(thresholdWords * 1.5);
+}
+function longSentenceRanges(markdown, thresholdWords, strip = {}) {
+  const veryLong = verySentenceThreshold(thresholdWords);
+  return splitSentences(stripMarkdown(markdown, strip)).filter((sentence) => sentence.words > thresholdWords).map((sentence) => ({
+    start: sentence.start,
+    end: sentence.end,
+    tier: sentence.words > veryLong ? "very-long" : "long",
+    words: sentence.words
+  }));
+}
+function longWordRanges(markdown, strip = {}) {
+  const clean = stripMarkdown(markdown, strip);
+  const ranges = [];
+  WORD_RE.lastIndex = 0;
+  let match;
+  while ((match = WORD_RE.exec(clean)) !== null) {
+    if (isLongWord(match[0])) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
+  return ranges;
+}
+
+// src/editor-highlight.ts
+var REBUILD_DEBOUNCE_MS = 250;
+var rebuildMarks = import_state.StateEffect.define();
+var LONG_MARK = import_view.Decoration.mark({ class: "rc-long-sentence" });
+var VERY_LONG_MARK = import_view.Decoration.mark({ class: "rc-long-sentence rc-very-long-sentence" });
+var LONG_WORD_MARK = import_view.Decoration.mark({ class: "rc-long-word" });
+function longSentenceExtension(plugin) {
+  const threshold = (view) => {
+    if (!plugin.settings.markingFollowsTarget) return plugin.settings.markingThreshold;
+    const file = view.state.field(import_obsidian.editorInfoField).file;
+    return longSentenceThreshold(plugin.resolveTargetFor(file).maxLix);
+  };
+  const build = (view) => {
+    const doc = view.state.doc.toString();
+    const file = view.state.field(import_obsidian.editorInfoField).file;
+    const strip = { includeTables: plugin.includeTablesFor(file) };
+    const clamp = (offset) => Math.min(offset, view.state.doc.length);
+    const marks = [];
+    if (plugin.settings.markLongSentences) {
+      for (const range of longSentenceRanges(doc, threshold(view), strip)) {
+        marks.push(
+          (range.tier === "very-long" ? VERY_LONG_MARK : LONG_MARK).range(
+            range.start,
+            clamp(range.end)
+          )
+        );
+      }
+    }
+    if (plugin.settings.markLongWords) {
+      for (const range of longWordRanges(doc, strip)) {
+        marks.push(LONG_WORD_MARK.range(range.start, clamp(range.end)));
+      }
+    }
+    return import_view.Decoration.set(marks, true);
+  };
+  class LongSentenceMarks {
+    constructor(view) {
+      this.view = view;
+      this.timer = null;
+      this.decorations = build(view);
+    }
+    update(update) {
+      const forced = update.transactions.some(
+        (tr) => tr.effects.some((effect) => effect.is(rebuildMarks))
+      );
+      if (forced) {
+        this.decorations = build(update.view);
+        return;
+      }
+      if (update.docChanged) {
+        this.decorations = this.decorations.map(update.changes);
+        this.schedule();
+      }
+    }
+    destroy() {
+      if (this.timer !== null) window.clearTimeout(this.timer);
+    }
+    schedule() {
+      if (this.timer !== null) window.clearTimeout(this.timer);
+      this.timer = window.setTimeout(() => {
+        this.timer = null;
+        this.view.dispatch({ effects: rebuildMarks.of(null) });
+      }, REBUILD_DEBOUNCE_MS);
+    }
+  }
+  return import_view.ViewPlugin.fromClass(LongSentenceMarks, {
+    decorations: (value) => value.decorations
+  });
+}
+
 // src/format.ts
+function formatTargetBand(target) {
+  return target.band === "custom" ? `LIX \u2264 ${Math.round(target.maxLix)}` : `\u2248 ${target.band.toUpperCase()}`;
+}
+function formatTargetSource(target) {
+  var _a, _b, _c;
+  switch (target.source) {
+    case "note":
+      return "note front matter";
+    case "diataxis":
+      return (_a = target.detail) != null ? _a : "diataxis type";
+    case "tag":
+      return `tag ${(_b = target.detail) != null ? _b : ""}`.trim();
+    case "folder":
+      return `folder ${(_c = target.detail) != null ? _c : ""}`.trim();
+    case "global":
+      return "global setting";
+  }
+}
+function targetSourceSuffix(target) {
+  if (target === null || target.source === "global") return "";
+  return ` \xB7 ${formatTargetSource(target)}`;
+}
 function formatLixValue(lix) {
   return String(Math.round(lix));
 }
@@ -474,7 +717,7 @@ function formatPercent(ratio) {
 }
 var ON_TARGET = "\u2713";
 var OFF_TARGET = "\u25B2";
-function formatStatusBarText(report, selection, segments) {
+function formatStatusBarText(report, selection, segments, target = null) {
   if (selection !== null) {
     const parts2 = [`${selection.words} w selected`];
     if (selection.lix !== null && segments.lix) {
@@ -491,7 +734,10 @@ function formatStatusBarText(report, selection, segments) {
     parts.push(report.cefr);
   }
   if (segments.target && report.onTarget !== null) {
-    parts.push(report.onTarget ? ON_TARGET : OFF_TARGET);
+    const mark = report.onTarget ? ON_TARGET : OFF_TARGET;
+    parts.push(
+      target !== null && target.source !== "global" ? `${mark} ${formatTargetBand(target)}` : mark
+    );
   }
   if (segments.words) {
     parts.push(`${report.words} w`);
@@ -501,7 +747,7 @@ function formatStatusBarText(report, selection, segments) {
   }
   return parts.join(" \xB7 ");
 }
-function formatNoticeText(report, title) {
+function formatNoticeText(report, title, targetInfo = null) {
   var _a, _b;
   const lines = [title];
   if (report.lix === null) {
@@ -509,7 +755,7 @@ function formatNoticeText(report, title) {
       `Too short for a stable score (min ${report.minWords} words; found ${report.words}).`
     );
   } else {
-    const target = report.onTarget ? `on target (max ${report.targetMaxLix})` : `above target (max ${report.targetMaxLix})`;
+    const target = report.onTarget ? `on target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})` : `above target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})`;
     lines.push(
       `LIX ${formatLixValue(report.lix)} (${(_a = report.band) != null ? _a : ""}) \xB7 ${(_b = report.cefr) != null ? _b : ""} \xB7 ${target}`
     );
@@ -527,7 +773,7 @@ function formatNoticeText(report, title) {
   }
   return lines.join("\n");
 }
-function formatCalloutReport(report, dateIso) {
+function formatCalloutReport(report, dateIso, targetInfo = null) {
   var _a, _b;
   const lines = [`> [!info] Readability \u2014 ${dateIso}`];
   if (report.lix === null) {
@@ -535,7 +781,7 @@ function formatCalloutReport(report, dateIso) {
       `> Too short for a stable score (min ${report.minWords} words; found ${report.words}).`
     );
   } else {
-    const target = report.onTarget ? `on target (max ${report.targetMaxLix})` : `above target (max ${report.targetMaxLix})`;
+    const target = report.onTarget ? `on target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})` : `above target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})`;
     lines.push(
       `> **LIX ${formatLixValue(report.lix)}** (${(_a = report.band) != null ? _a : ""}) \xB7 ${(_b = report.cefr) != null ? _b : ""} \xB7 ${target}`
     );
@@ -552,11 +798,19 @@ function formatCalloutReport(report, dateIso) {
 }
 
 // src/settings.ts
-var import_obsidian = require("obsidian");
+var import_obsidian2 = require("obsidian");
 var DEFAULT_SETTINGS = {
   language: "auto",
   targetBand: "b2",
   customMaxLix: 45,
+  deriveFromDiataxis: true,
+  tagRules: [],
+  folderRules: [],
+  markLongSentences: false,
+  markingFollowsTarget: true,
+  markingThreshold: 25,
+  markLongWords: false,
+  includeTables: false,
   minWords: 40,
   wordsPerMinute: 225,
   showStatusBar: true,
@@ -568,7 +822,7 @@ var DEFAULT_SETTINGS = {
     readingTime: false
   }
 };
-var ReadabilityCompassSettingTab = class extends import_obsidian.PluginSettingTab {
+var ReadabilityCompassSettingTab = class extends import_obsidian2.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -576,8 +830,8 @@ var ReadabilityCompassSettingTab = class extends import_obsidian.PluginSettingTa
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Target").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Target audience").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Target").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Target audience").setDesc(
       "The reading level your notes should stay at. CEFR bands are translated to a LIX ceiling."
     ).addDropdown(
       (dropdown) => dropdown.addOption("b1", `\u2248 B1 \u2014 plain (LIX \u2264 ${TARGET_MAX_LIX.b1})`).addOption("b2", `\u2248 B2 \u2014 clear (LIX \u2264 ${TARGET_MAX_LIX.b2})`).addOption("c1", `\u2248 C1 \u2014 advanced (LIX \u2264 ${TARGET_MAX_LIX.c1})`).addOption("custom", "Custom LIX ceiling").setValue(this.plugin.settings.targetBand).onChange(async (value) => {
@@ -587,15 +841,44 @@ var ReadabilityCompassSettingTab = class extends import_obsidian.PluginSettingTa
       })
     );
     if (this.plugin.settings.targetBand === "custom") {
-      new import_obsidian.Setting(containerEl).setName("Custom LIX ceiling").setDesc("Scores above this value count as off target.").addSlider(
-        (slider) => slider.setLimits(20, 70, 1).setValue(this.plugin.settings.customMaxLix).onChange(async (value) => {
+      this.addLabelledSlider(
+        new import_obsidian2.Setting(containerEl).setName("Custom LIX ceiling").setDesc("Scores above this value count as off target."),
+        { min: 20, max: 70, step: 1 },
+        () => this.plugin.settings.customMaxLix,
+        (value) => `LIX ${value}`,
+        async (value) => {
           this.plugin.settings.customMaxLix = value;
           await this.plugin.saveSettings();
-        })
+        }
       );
     }
-    new import_obsidian.Setting(containerEl).setName("Measurement").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Language").setDesc(
+    new import_obsidian2.Setting(containerEl).setName("Target profiles").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Derive target from diataxis type").setDesc(
+      "Notes with a 'diataxis' front matter key get a matching target: tutorial \u2248 B1; how-to, reference and explanation \u2248 B2. A 'readability-target' key always wins."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.deriveFromDiataxis).onChange(async (value) => {
+        this.plugin.settings.deriveFromDiataxis = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    this.renderRuleList(
+      containerEl,
+      this.plugin.settings.tagRules,
+      "Tag rules",
+      "Notes carrying the tag (or a nested tag under it) get this target. The first matching rule wins. Tag rules beat folder rules.",
+      "Add tag rule",
+      "#blog"
+    );
+    this.renderRuleList(
+      containerEl,
+      this.plugin.settings.folderRules,
+      "Folder rules",
+      "Notes inside the folder get this target. The most specific (longest) matching folder wins.",
+      "Add folder rule",
+      "docs/tutorials"
+    );
+    new import_obsidian2.Setting(containerEl).setName("Measurement").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Language").setDesc(
       "Picks the Flesch variant for that language (e.g. Flesch-Douma for Dutch). LIX itself is language-independent. Auto-detect falls back to LIX only when unsure."
     ).addDropdown((dropdown) => {
       dropdown.addOption("auto", "Auto-detect");
@@ -607,20 +890,76 @@ var ReadabilityCompassSettingTab = class extends import_obsidian.PluginSettingTa
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian.Setting(containerEl).setName("Minimum words for a score").setDesc("Below this word count LIX is too erratic and is hidden.").addSlider(
-      (slider) => slider.setLimits(10, 100, 5).setValue(this.plugin.settings.minWords).onChange(async (value) => {
+    this.addLabelledSlider(
+      new import_obsidian2.Setting(containerEl).setName("Minimum words for a score").setDesc("Below this word count LIX is too erratic and is hidden."),
+      { min: 10, max: 100, step: 5 },
+      () => this.plugin.settings.minWords,
+      (value) => `${value} words`,
+      async (value) => {
         this.plugin.settings.minWords = value;
         await this.plugin.saveSettings();
-      })
+      }
     );
-    new import_obsidian.Setting(containerEl).setName("Reading speed").setDesc("Words per minute, used for the reading time estimate.").addSlider(
-      (slider) => slider.setLimits(100, 400, 25).setValue(this.plugin.settings.wordsPerMinute).onChange(async (value) => {
-        this.plugin.settings.wordsPerMinute = value;
+    new import_obsidian2.Setting(containerEl).setName("Include table text").setDesc(
+      "Count the text inside Markdown tables \u2014 for notes that are tables, like question banks. Per note override: 'readability-tables: true' (or false) in the front matter. A manual selection always includes tables and code."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.includeTables).onChange(async (value) => {
+        this.plugin.settings.includeTables = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Status bar").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Show in status bar").setDesc("The always-on indicator. Click it to open the panel.").addToggle(
+    new import_obsidian2.Setting(containerEl).setName("Mark long sentences in the editor").setDesc(
+      "Give sentences above the threshold a subtle background while you write. Never marks code, front matter or tables."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.markLongSentences).onChange(async (value) => {
+        this.plugin.settings.markLongSentences = value;
+        await this.plugin.saveSettings();
+        this.display();
+      })
+    );
+    if (this.plugin.settings.markLongSentences) {
+      new import_obsidian2.Setting(containerEl).setName("Marking threshold follows the target").setDesc(
+        "Derive the words-per-sentence threshold from the active target profile (\u2248 B1 \u21D2 22, \u2248 B2 \u21D2 25, \u2248 C1 \u21D2 30). Turn off for a fixed threshold."
+      ).addToggle(
+        (toggle) => toggle.setValue(this.plugin.settings.markingFollowsTarget).onChange(async (value) => {
+          this.plugin.settings.markingFollowsTarget = value;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+      if (!this.plugin.settings.markingFollowsTarget) {
+        this.addLabelledSlider(
+          new import_obsidian2.Setting(containerEl).setName("Marking threshold (words per sentence)").setDesc("Sentences above this word count get marked."),
+          { min: 10, max: 60, step: 1 },
+          () => this.plugin.settings.markingThreshold,
+          (value) => `${value} words`,
+          async (value) => {
+            this.plugin.settings.markingThreshold = value;
+            await this.plugin.saveSettings();
+          }
+        );
+      }
+    }
+    new import_obsidian2.Setting(containerEl).setName("Mark long words in the editor").setDesc(
+      "Underline every long word (> 6 letters) \u2014 the other LIX ingredient. Shows why keyword-dense text scores high even without long sentences."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.markLongWords).onChange(async (value) => {
+        this.plugin.settings.markLongWords = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    this.addLabelledSlider(
+      new import_obsidian2.Setting(containerEl).setName("Reading speed").setDesc("Words per minute, used for the reading time estimate."),
+      { min: 100, max: 400, step: 25 },
+      () => this.plugin.settings.wordsPerMinute,
+      (value) => `${value} wpm`,
+      async (value) => {
+        this.plugin.settings.wordsPerMinute = value;
+        await this.plugin.saveSettings();
+      }
+    );
+    new import_obsidian2.Setting(containerEl).setName("Status bar").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Show in status bar").setDesc("The always-on indicator. Click it to open the panel.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.showStatusBar).onChange(async (value) => {
         this.plugin.settings.showStatusBar = value;
         await this.plugin.saveSettings();
@@ -634,7 +973,7 @@ var ReadabilityCompassSettingTab = class extends import_obsidian.PluginSettingTa
       { key: "readingTime", name: "Reading time", desc: "Estimated reading time." }
     ];
     for (const segment of segments) {
-      new import_obsidian.Setting(containerEl).setName(segment.name).setDesc(segment.desc).addToggle(
+      new import_obsidian2.Setting(containerEl).setName(segment.name).setDesc(segment.desc).addToggle(
         (toggle) => toggle.setValue(this.plugin.settings.statusBar[segment.key]).onChange(async (value) => {
           this.plugin.settings.statusBar[segment.key] = value;
           await this.plugin.saveSettings();
@@ -642,10 +981,71 @@ var ReadabilityCompassSettingTab = class extends import_obsidian.PluginSettingTa
       );
     }
   }
+  /**
+   * Slider with an always-visible value label (owner-test finding, BC_E1_S8:
+   * a bare slider gives no number to reason with).
+   */
+  addLabelledSlider(setting, limits, getValue, format, onChange) {
+    const label = createSpan({ cls: "rc-slider-value", text: format(getValue()) });
+    setting.addSlider(
+      (slider) => slider.setLimits(limits.min, limits.max, limits.step).setValue(getValue()).onChange(async (value) => {
+        label.setText(format(value));
+        await onChange(value);
+      })
+    );
+    setting.controlEl.prepend(label);
+  }
+  /** One editable row per rule (pattern + band + delete) plus an add button. */
+  renderRuleList(containerEl, rules, name, desc, addLabel, placeholder) {
+    new import_obsidian2.Setting(containerEl).setName(name).setDesc(desc).addButton(
+      (button) => button.setButtonText(addLabel).onClick(async () => {
+        rules.push({ pattern: "", band: "b2", customMaxLix: 45 });
+        await this.plugin.saveSettings();
+        this.display();
+      })
+    );
+    for (const rule of rules) {
+      const row = new import_obsidian2.Setting(containerEl);
+      row.setClass("rc-rule-row");
+      row.addText(
+        (text) => text.setPlaceholder(placeholder).setValue(rule.pattern).onChange(async (value) => {
+          rule.pattern = value;
+          await this.plugin.saveSettings();
+        })
+      );
+      row.addDropdown(
+        (dropdown) => dropdown.addOption("b1", "\u2248 B1").addOption("b2", "\u2248 B2").addOption("c1", "\u2248 C1").addOption("custom", "Custom").setValue(rule.band).onChange(async (value) => {
+          rule.band = value;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+      if (rule.band === "custom") {
+        row.addText((text) => {
+          text.inputEl.type = "number";
+          text.inputEl.addClass("rc-rule-lix");
+          text.setPlaceholder("45").setValue(String(rule.customMaxLix)).onChange(async (value) => {
+            const numeric = Number(value);
+            if (Number.isFinite(numeric) && numeric > 0) {
+              rule.customMaxLix = numeric;
+              await this.plugin.saveSettings();
+            }
+          });
+        });
+      }
+      row.addExtraButton(
+        (button) => button.setIcon("trash").setTooltip("Remove rule").onClick(async () => {
+          rules.splice(rules.indexOf(rule), 1);
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+    }
+  }
 };
 
 // src/panel.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 var VIEW_TYPE_READABILITY = "readability-compass-panel";
 var LANGUAGE_LABEL = {
   unknown: "language unknown \u2014 LIX only"
@@ -653,7 +1053,7 @@ var LANGUAGE_LABEL = {
 for (const language of LANGUAGES) {
   LANGUAGE_LABEL[language.code] = language.label;
 }
-var ReadabilityPanelView = class extends import_obsidian2.ItemView {
+var ReadabilityPanelView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -671,7 +1071,7 @@ var ReadabilityPanelView = class extends import_obsidian2.ItemView {
     this.plugin.refreshUi();
     return Promise.resolve();
   }
-  render(report, fileName) {
+  render(report, fileName, target = null) {
     var _a, _b, _c;
     const root = this.contentEl;
     root.empty();
@@ -702,6 +1102,12 @@ var ReadabilityPanelView = class extends import_obsidian2.ItemView {
       card.createDiv({
         text: onTarget ? `\u2713 on target (max ${report.targetMaxLix})` : `\u25B2 above target (max ${report.targetMaxLix})`,
         cls: onTarget ? "rc-target rc-target-ok" : "rc-target rc-target-off"
+      });
+    }
+    if (target !== null) {
+      card.createDiv({
+        text: `Target ${formatTargetBand(target)} \xB7 from ${formatTargetSource(target)}`,
+        cls: "rc-target-source"
       });
     }
     const secondary = root.createDiv({ cls: "rc-secondary" });
@@ -741,7 +1147,7 @@ var ReadabilityPanelView = class extends import_obsidian2.ItemView {
       }
     }
     root.createEl("p", {
-      text: "Measured on running text \u2014 front matter, code, tables, links and URLs are excluded.",
+      text: report.tablesIncluded ? "Measured on running text incl. tables \u2014 front matter, code, links and URLs are excluded." : "Measured on running text \u2014 front matter, code, tables, links and URLs are excluded.",
       cls: "rc-footnote"
     });
   }
@@ -754,13 +1160,15 @@ function truncate(text, max) {
 }
 
 // src/main.ts
-var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
+var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
     this.statusBarEl = null;
     /** Last markdown view with content, so the panel keeps working when focused. */
     this.lastMarkdownView = null;
+    /** Mutable container for registerEditorExtension; contents swap on settings changes. */
+    this.editorExtensions = [];
   }
   async onload() {
     await this.loadSettings();
@@ -776,12 +1184,15 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
     });
     this.addSettingTab(new ReadabilityCompassSettingTab(this.app, this));
     this.addCommands();
-    const refreshSoon = (0, import_obsidian3.debounce)(() => this.refreshUi(), 400, true);
-    const refreshStatusSoon = (0, import_obsidian3.debounce)(() => this.refreshStatusBar(), 200, true);
+    this.registerEditorExtension(this.editorExtensions);
+    this.syncEditorExtensions();
+    const refreshSoon = (0, import_obsidian4.debounce)(() => this.refreshUi(), 400, true);
+    const refreshStatusSoon = (0, import_obsidian4.debounce)(() => this.refreshStatusBar(), 200, true);
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => this.refreshUi())
     );
     this.registerEvent(this.app.workspace.on("editor-change", refreshSoon));
+    this.registerEvent(this.app.metadataCache.on("changed", refreshSoon));
     this.registerDomEvent(document, "selectionchange", refreshStatusSoon);
     this.app.workspace.onLayoutReady(() => this.refreshUi());
   }
@@ -796,22 +1207,75 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
   }
   async saveSettings() {
     await this.saveData(this.settings);
+    this.syncEditorExtensions();
     this.refreshUi();
   }
+  /** (Un)install the editor marking; updateOptions rebuilds the editors. */
+  syncEditorExtensions() {
+    this.editorExtensions.length = 0;
+    if (this.settings.markLongSentences || this.settings.markLongWords) {
+      this.editorExtensions.push(longSentenceExtension(this));
+    }
+    this.app.workspace.updateOptions();
+  }
   // --- Analysis -----------------------------------------------------------
-  analyzeOptions() {
+  /** Resolve which target applies to a file (front matter > diataxis > tag > folder > global). */
+  resolveTargetFor(file) {
+    var _a, _b;
+    let context = null;
+    if (file !== null) {
+      const cache = this.app.metadataCache.getFileCache(file);
+      context = {
+        path: file.path,
+        tags: cache === null ? [] : (_a = (0, import_obsidian4.getAllTags)(cache)) != null ? _a : [],
+        frontmatter: (_b = cache == null ? void 0 : cache.frontmatter) != null ? _b : null
+      };
+    }
+    return resolveTarget(context, {
+      deriveFromDiataxis: this.settings.deriveFromDiataxis,
+      tagRules: this.settings.tagRules,
+      folderRules: this.settings.folderRules,
+      globalBand: this.settings.targetBand,
+      globalCustomMaxLix: this.settings.customMaxLix
+    });
+  }
+  /** Note-level table inclusion: front matter `readability-tables` wins over the setting. */
+  includeTablesFor(file) {
+    var _a;
+    if (file !== null) {
+      const frontmatter = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+      const value = frontmatter == null ? void 0 : frontmatter["readability-tables"];
+      if (typeof value === "boolean") return value;
+      if (typeof value === "string") {
+        const text = value.trim().toLowerCase();
+        if (text === "true" || text === "include") return true;
+        if (text === "false" || text === "exclude") return false;
+      }
+    }
+    return this.settings.includeTables;
+  }
+  analyzeOptions(target, file) {
     return {
       language: this.settings.language,
       minWords: this.settings.minWords,
       wordsPerMinute: this.settings.wordsPerMinute,
-      targetMaxLix: targetMaxLix(
-        this.settings.targetBand,
-        this.settings.customMaxLix
-      )
+      targetMaxLix: target.maxLix,
+      includeTables: this.includeTablesFor(file)
+    };
+  }
+  /** A manual selection means "measure this" — tables and code included. */
+  selectionAnalyzeOptions(target) {
+    return {
+      language: this.settings.language,
+      minWords: this.settings.minWords,
+      wordsPerMinute: this.settings.wordsPerMinute,
+      targetMaxLix: target.maxLix,
+      includeTables: true,
+      includeCode: true
     };
   }
   activeMarkdownView() {
-    const active = this.app.workspace.getActiveViewOfType(import_obsidian3.MarkdownView);
+    const active = this.app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
     if (active !== null) {
       this.lastMarkdownView = active;
       return active;
@@ -822,28 +1286,42 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
     this.lastMarkdownView = null;
     return null;
   }
-  analyzeView(view) {
-    return analyzeMarkdown(view.editor.getValue(), this.analyzeOptions());
+  analyzeView(view, target) {
+    return analyzeMarkdown(
+      view.editor.getValue(),
+      this.analyzeOptions(target, view.file)
+    );
   }
-  selectionStats(view) {
+  selectionStats(view, target) {
     const editor = view == null ? void 0 : view.editor;
     if (!editor || !editor.somethingSelected()) return null;
-    const report = analyzeMarkdown(editor.getSelection(), this.analyzeOptions());
+    const report = analyzeMarkdown(
+      editor.getSelection(),
+      this.selectionAnalyzeOptions(target)
+    );
     if (report.words === 0) return null;
     return { words: report.words, lix: report.lix };
   }
   // --- UI refresh ---------------------------------------------------------
   refreshUi() {
+    var _a;
     const view = this.activeMarkdownView();
-    const report = view === null ? null : this.analyzeView(view);
-    this.renderStatusBar(view, report);
-    this.renderPanels(view, report);
+    const target = this.resolveTargetFor((_a = view == null ? void 0 : view.file) != null ? _a : null);
+    const report = view === null ? null : this.analyzeView(view, target);
+    this.renderStatusBar(view, report, target);
+    this.renderPanels(view, report, target);
   }
   refreshStatusBar() {
+    var _a;
     const view = this.activeMarkdownView();
-    this.renderStatusBar(view, view === null ? null : this.analyzeView(view));
+    const target = this.resolveTargetFor((_a = view == null ? void 0 : view.file) != null ? _a : null);
+    this.renderStatusBar(
+      view,
+      view === null ? null : this.analyzeView(view, target),
+      target
+    );
   }
-  renderStatusBar(view, report) {
+  renderStatusBar(view, report, target) {
     if (this.statusBarEl === null) return;
     if (!this.settings.showStatusBar) {
       this.statusBarEl.setText("");
@@ -852,22 +1330,29 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
     }
     const text = formatStatusBarText(
       report,
-      this.selectionStats(view),
-      this.settings.statusBar
+      this.selectionStats(view, target),
+      this.settings.statusBar,
+      target
     );
     this.statusBarEl.setText(text);
+    this.statusBarEl.setAttribute(
+      "aria-label",
+      `Readability \u2014 target ${formatTargetBand(target)} (LIX \u2264 ${Math.round(
+        target.maxLix
+      )}) from ${formatTargetSource(target)} \u2014 click for details`
+    );
     if (text === "") {
       this.statusBarEl.hide();
     } else {
       this.statusBarEl.show();
     }
   }
-  renderPanels(view, report) {
+  renderPanels(view, report, target) {
     var _a, _b;
     const fileName = (_b = (_a = view == null ? void 0 : view.file) == null ? void 0 : _a.basename) != null ? _b : null;
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_READABILITY)) {
       if (leaf.view instanceof ReadabilityPanelView) {
-        leaf.view.render(report, fileName);
+        leaf.view.render(report, fileName, target);
       }
     }
   }
@@ -913,9 +1398,14 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
         const view = this.activeMarkdownView();
         if (view === null) return false;
         if (!checking) {
-          const report = this.analyzeView(view);
-          new import_obsidian3.Notice(
-            formatNoticeText(report, (_b = (_a = view.file) == null ? void 0 : _a.basename) != null ? _b : "Current note"),
+          const target = this.resolveTargetFor(view.file);
+          const report = this.analyzeView(view, target);
+          new import_obsidian4.Notice(
+            formatNoticeText(
+              report,
+              (_b = (_a = view.file) == null ? void 0 : _a.basename) != null ? _b : "Current note",
+              target
+            ),
             1e4
           );
         }
@@ -926,13 +1416,17 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
       id: "score-selection",
       name: "Show readability of selection",
       editorCheckCallback: (checking, editor) => {
+        var _a, _b;
         if (!editor.somethingSelected()) return false;
         if (!checking) {
+          const target = this.resolveTargetFor(
+            (_b = (_a = this.activeMarkdownView()) == null ? void 0 : _a.file) != null ? _b : null
+          );
           const report = analyzeMarkdown(
             editor.getSelection(),
-            this.analyzeOptions()
+            this.selectionAnalyzeOptions(target)
           );
-          new import_obsidian3.Notice(formatNoticeText(report, "Selection"), 1e4);
+          new import_obsidian4.Notice(formatNoticeText(report, "Selection", target), 1e4);
         }
         return true;
       }
@@ -941,9 +1435,15 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
       id: "insert-report",
       name: "Insert readability report at cursor",
       editorCallback: (editor) => {
-        const report = analyzeMarkdown(editor.getValue(), this.analyzeOptions());
+        var _a, _b;
+        const file = (_b = (_a = this.activeMarkdownView()) == null ? void 0 : _a.file) != null ? _b : null;
+        const target = this.resolveTargetFor(file);
+        const report = analyzeMarkdown(
+          editor.getValue(),
+          this.analyzeOptions(target, file)
+        );
         const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-        editor.replaceSelection(formatCalloutReport(report, date));
+        editor.replaceSelection(formatCalloutReport(report, date, target));
       }
     });
     this.addCommand({
@@ -951,6 +1451,14 @@ var ReadabilityCompassPlugin = class extends import_obsidian3.Plugin {
       name: "Toggle readability in status bar",
       callback: () => {
         this.settings.showStatusBar = !this.settings.showStatusBar;
+        void this.saveSettings();
+      }
+    });
+    this.addCommand({
+      id: "toggle-sentence-marking",
+      name: "Toggle long sentence marking",
+      callback: () => {
+        this.settings.markLongSentences = !this.settings.markLongSentences;
         void this.saveSettings();
       }
     });

@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.2.0]
+
+**Your target now follows the note's context — and long sentences light up where you write.**
+
+- **Target profiles** (new): set a different target band per folder or per tag (e.g. `blog/`
+  ⇒ ≈ B1, `docs/` ⇒ ≈ B2), override per note with `readability-target: b1` (or a bare LIX
+  ceiling like `42`) in the front matter, or derive it from a `diataxis:` type (tutorial ⇒
+  ≈ B1; how-to, reference and explanation ⇒ ≈ B2). Priority: front matter > diataxis > tag
+  > folder > global setting. The status bar shows the band next to the target check when a
+  rule applies; the panel and inserted reports name the source (e.g. "from folder blog/").
+- **Inline long-sentence marking** (new, off by default): sentences above the threshold get
+  a subtle background in the editor, with a second tint for the ones nobody finishes. The
+  threshold follows your active target profile (≈ B1 ⇒ 22, ≈ B2 ⇒ 25, ≈ C1 ⇒ 30 words
+  per sentence) or a fixed value you choose. Never marks inside code, front matter or
+  tables. Toggle in the settings or via the new command.
+- **Mark long words** (new, off by default): underline every long word (> 6 letters) — the
+  other LIX ingredient. Shows why keyword-dense notes score high even without long sentences.
+- **Include table text** (new, off by default): count the text inside Markdown tables, for
+  notes that *are* tables (question banks, glossaries). Per-note override with
+  `readability-tables: true`/`false` in the front matter. A manual selection now always
+  measures everything you selected — tables **and** code (so you can score prose that lives
+  inside a code block, like help text).
+- Sliders in the settings now show their value (minimum words, reading speed, custom LIX
+  ceiling, marking threshold).
+- Sharper manifest description; funding link added.
+- Still: everything local, no network calls, no telemetry — and all of it free.
+
 ## [0.1.0]
 
 **First release.** Readability Compass measures the reading level of your notes with one
