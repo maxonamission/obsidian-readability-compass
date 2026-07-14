@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1]
+
+**Selections across table cells now count every cell.** Live Preview renders tables as
+widgets whose cells are separate sub-editors, so a selection across cells reached the plugin
+as just the first cell. The status bar and the selection command now read the full visible
+selection inside the note, and stray table pipes in a selection that starts mid-row are
+ignored. As a bonus, the selection command is also available when the selection lives
+entirely inside a rendered table.
+
+Also: the long-word underline now uses a plain dotted border instead of `text-decoration`,
+which Obsidian's automated review flags as only partially supported on older webviews.
+
 ## [0.2.0]
 
 **Your target now follows the note's context — and long sentences light up where you write.**

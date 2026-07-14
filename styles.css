@@ -147,8 +147,8 @@
 	text-align: right;
 }
 
+/* border-bottom i.p.v. text-decoration: Obsidians review flagt de
+   text-decoration-shorthand als "partially supported" (1.6.5-webviews). */
 .rc-long-word {
-	text-decoration: underline dotted;
-	text-decoration-color: var(--text-faint);
-	text-underline-offset: 0.15em;
+	border-bottom: 1px dotted var(--text-faint);
 }

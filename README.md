@@ -10,7 +10,7 @@ Readability Compass replaces the guess with a signal, right where you write. It 
 
 ## Get started in 60 seconds
 
-1. **Install & enable** (see [Install](#install) below — community listing in preparation).
+1. **Install & enable**: Settings → Community plugins → search for *Readability Compass*.
 2. **Pick your audience** in the settings: ≈ B1, B2, C1, or a custom LIX ceiling.
 3. **Write.** The status bar keeps score: `LIX 42 · ≈ B2 · ✓ · 351 w`. Click it whenever you want the why.
 
@@ -84,15 +84,15 @@ Nothing. Every score is computed locally: **no network calls, no telemetry, no a
 
 ## Install
 
-**Community plugins**: not yet listed — submission to the community directory is in
-preparation. Until then, install manually:
+**Community plugins**: Settings → Community plugins → search for *Readability Compass* →
+Install → Enable. Or start from the
+[directory listing](https://community.obsidian.md/plugins/readability-compass).
 
-1. Download `main.js`, `manifest.json` and `styles.css` from the latest
-   [release](../../releases).
-2. Copy them into `<vault>/.obsidian/plugins/readability-compass/`.
-3. Enable the plugin under **Settings → Community plugins**.
+Manual: download `main.js`, `manifest.json` and `styles.css` from the latest
+[release](../../releases) and copy them into
+`<vault>/.obsidian/plugins/readability-compass/`.
 
-Works on desktop and mobile.
+Works on desktop and mobile (Obsidian 1.7.2+).
 
 ## Works well with
 

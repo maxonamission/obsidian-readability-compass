@@ -73,7 +73,7 @@ function stripMarkdown(text, options = {}) {
   }
   if (options.includeTables === true) {
     t = t.replace(TABLE_SEPARATOR_RE, blank);
-    t = t.replace(TABLE_ROW_RE, (row) => row.replace(/\|/g, " "));
+    t = t.replace(/\|/g, " ");
   } else {
     t = t.replace(TABLE_ROW_RE, blank);
   }
@@ -1292,13 +1292,27 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
       this.analyzeOptions(target, view.file)
     );
   }
+  /**
+   * The selected text. Live Preview renders tables as widgets whose cells are
+   * separate sub-editors: a selection across cells reaches the editor as only
+   * the first cell. The visible DOM selection inside this view does carry the
+   * whole selection, so prefer it when it is the richer of the two
+   * (owner-test finding, BC_E1_S9).
+   */
+  selectedText(view) {
+    const editorSelection = view.editor.somethingSelected() ? view.editor.getSelection() : "";
+    const domSelection = view.containerEl.ownerDocument.getSelection();
+    if (domSelection !== null && !domSelection.isCollapsed && view.containerEl.contains(domSelection.anchorNode)) {
+      const domText = domSelection.toString();
+      if (domText.length > editorSelection.length) return domText;
+    }
+    return editorSelection;
+  }
   selectionStats(view, target) {
-    const editor = view == null ? void 0 : view.editor;
-    if (!editor || !editor.somethingSelected()) return null;
-    const report = analyzeMarkdown(
-      editor.getSelection(),
-      this.selectionAnalyzeOptions(target)
-    );
+    if (view === null) return null;
+    const text = this.selectedText(view);
+    if (text.trim() === "") return null;
+    const report = analyzeMarkdown(text, this.selectionAnalyzeOptions(target));
     if (report.words === 0) return null;
     return { words: report.words, lix: report.lix };
   }
@@ -1415,15 +1429,15 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     this.addCommand({
       id: "score-selection",
       name: "Show readability of selection",
-      editorCheckCallback: (checking, editor) => {
-        var _a, _b;
-        if (!editor.somethingSelected()) return false;
+      checkCallback: (checking) => {
+        const view = this.activeMarkdownView();
+        if (view === null) return false;
+        const text = this.selectedText(view);
+        if (text.trim() === "") return false;
         if (!checking) {
-          const target = this.resolveTargetFor(
-            (_b = (_a = this.activeMarkdownView()) == null ? void 0 : _a.file) != null ? _b : null
-          );
+          const target = this.resolveTargetFor(view.file);
           const report = analyzeMarkdown(
-            editor.getSelection(),
+            text,
             this.selectionAnalyzeOptions(target)
           );
           new import_obsidian4.Notice(formatNoticeText(report, "Selection", target), 1e4);
