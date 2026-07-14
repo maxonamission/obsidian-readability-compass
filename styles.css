@@ -1,0 +1,107 @@
+/* Readability Compass */
+
+.rc-status {
+	color: var(--text-muted);
+}
+
+.rc-panel {
+	padding: var(--size-4-3);
+}
+
+.rc-empty,
+.rc-hint {
+	color: var(--text-muted);
+}
+
+.rc-file {
+	font-weight: var(--font-semibold);
+	margin-bottom: var(--size-4-2);
+}
+
+.rc-card {
+	text-align: center;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	padding: var(--size-4-3);
+	margin-bottom: var(--size-4-2);
+}
+
+.rc-score {
+	font-size: 2.6em;
+	font-weight: var(--font-bold);
+	line-height: 1.1;
+}
+
+.rc-score-label {
+	color: var(--text-muted);
+	font-size: var(--font-smaller);
+	letter-spacing: 0.1em;
+}
+
+.rc-band {
+	margin-top: var(--size-2-2);
+}
+
+.rc-target {
+	margin-top: var(--size-2-2);
+	font-size: var(--font-smaller);
+}
+
+.rc-target-ok {
+	color: var(--text-success);
+}
+
+.rc-target-off {
+	color: var(--text-warning);
+}
+
+.rc-secondary {
+	color: var(--text-muted);
+	font-size: var(--font-smaller);
+	margin-bottom: var(--size-4-2);
+}
+
+.rc-counts {
+	margin-bottom: var(--size-4-2);
+}
+
+.rc-count-row {
+	display: flex;
+	justify-content: space-between;
+	padding: var(--size-2-1) 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.rc-count-label {
+	color: var(--text-muted);
+}
+
+.rc-section-title {
+	font-weight: var(--font-semibold);
+	margin: var(--size-4-2) 0 var(--size-2-2) 0;
+}
+
+.rc-sentences {
+	padding-inline-start: var(--size-4-4);
+	margin: 0;
+}
+
+.rc-sentence {
+	cursor: pointer;
+	margin-bottom: var(--size-2-2);
+}
+
+.rc-sentence:hover {
+	color: var(--text-accent);
+}
+
+.rc-sentence-words {
+	color: var(--text-muted);
+	font-size: var(--font-smaller);
+}
+
+.rc-footnote {
+	color: var(--text-faint);
+	font-size: var(--font-smaller);
+	margin-top: var(--size-4-3);
+}
