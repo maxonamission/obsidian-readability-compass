@@ -83,6 +83,23 @@ preparation. Until then, install manually:
 
 Works on desktop and mobile.
 
+## Works well with
+
+**[Voxtral Transcribe](https://github.com/maxonamission/obsidian-voxtral)** — from the same
+workshop. Spoken first drafts are honest but rambling: speak your idea on a walk, let Voxtral
+turn it into a markdown note, then let Readability Compass show how far that transcript is
+from your audience — your longest sentences are one click away. Capture by voice, tighten by
+compass.
+
+**[Parallax](https://github.com/maxonamission/obsidian-parallax)** — also from the same
+workshop. Parallax guards the thinking *behind* your conclusions (graded evidence, belief
+tracking, a methodological account); Readability Compass guards whether the write-up of those
+conclusions reads at the level your audience needs. Sound research on one side, readable
+reporting on the other.
+
+The three plugins share the same principles — your notes stay yours, local where possible, no
+telemetry — but stay deliberately separate tools, each owning its own job.
+
 ## Support
 
 Readability Compass is free and GPL-3.0. If it keeps your writing on target, you can
