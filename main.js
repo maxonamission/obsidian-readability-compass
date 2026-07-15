@@ -1310,7 +1310,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       text: "Back to current note",
       cls: "rc-back-button"
     });
-    this.registerDomEvent(back, "mousedown", () => this.plugin.clearMultiReport());
+    this.registerDomEvent(back, "click", () => this.plugin.clearMultiReport());
     const combined = multi.combined;
     const card = root.createDiv({ cls: "rc-card" });
     if (combined.lix === null) {
@@ -1359,8 +1359,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
         cls: "rc-count-value"
       });
       item.setAttribute("title", "Click to open this note");
-      this.registerDomEvent(item, "mousedown", (evt) => {
-        evt.preventDefault();
+      this.registerDomEvent(item, "click", () => {
         void this.plugin.jumpToFileSpan(entry.file);
       });
     }
@@ -1391,8 +1390,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       });
       item.createSpan({ text: truncate(paragraph.text, 140) });
       item.setAttribute("title", "Click to jump to this paragraph");
-      this.registerDomEvent(item, "mousedown", (evt) => {
-        evt.preventDefault();
+      this.registerDomEvent(item, "click", () => {
         this.plugin.jumpToSpan(paragraph);
       });
     }
@@ -1419,8 +1417,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       });
       item.createSpan({ text: truncate(entry.span.text, 140) });
       item.setAttribute("title", "Click to jump to this sentence");
-      this.registerDomEvent(item, "mousedown", (evt) => {
-        evt.preventDefault();
+      this.registerDomEvent(item, "click", () => {
         entry.onSelect();
       });
     }
@@ -1432,9 +1429,8 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       text: `Show more (${hidden} hidden)`,
       cls: "rc-show-more"
     });
-    this.registerDomEvent(button, "mousedown", (evt) => {
+    this.registerDomEvent(button, "click", () => {
       var _a;
-      evt.preventDefault();
       this.extraEntries += SHOW_MORE_STEP;
       this.renderedMulti = null;
       (_a = this.lastRender) == null ? void 0 : _a.call(this);
@@ -1507,7 +1503,10 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     const refreshSoon = (0, import_obsidian4.debounce)(() => void this.editedRefresh(), 400, true);
     const refreshStatusSoon = (0, import_obsidian4.debounce)(() => this.refreshStatusBar(), 200, true);
     this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => this.refreshUi())
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf !== null && leaf.view instanceof ReadabilityPanelView) return;
+        this.refreshUi();
+      })
     );
     this.registerEvent(this.app.workspace.on("editor-change", refreshSoon));
     this.registerEvent(this.app.metadataCache.on("changed", refreshSoon));
@@ -1863,6 +1862,13 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     } else {
       view.setEphemeralState({ focus: true });
     }
+    this.revealEditorOnMobile(leaf);
+  }
+  /** On mobile the panel is a full-screen drawer; slide it away so the jump's editor shows. */
+  revealEditorOnMobile(leaf) {
+    if (!import_obsidian4.Platform.isMobile) return;
+    this.app.workspace.rightSplit.collapse();
+    void this.app.workspace.revealLeaf(leaf);
   }
   /** A markdown leaf to open a file in (see jumpToFileSpan). */
   resolveMarkdownLeaf(file) {
@@ -1896,6 +1902,7 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     const view = this.activeMarkdownView();
     if (view === null) return;
     this.applySpan(view, span);
+    this.revealEditorOnMobile(view.leaf);
   }
   /** Document offsets → a clamped editor range on the live editor. */
   spanToRange(editor, span) {

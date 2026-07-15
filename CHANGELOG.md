@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1]
+
+**The panel works on mobile now.** Tapping a note, sentence or paragraph in the side panel
+did nothing on phones and tablets — it listened for a mouse event that a touch doesn't send.
+The list now responds to a plain tap/click everywhere, and on mobile the panel slides away so
+the note it jumped to is in front of you (with the sentence selected). On desktop nothing
+changes — the panel stays put beside the note.
+
 ## [0.5.0]
 
 **Clicking a sentence or paragraph in the panel now lands reliably — every time.** The
