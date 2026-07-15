@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.0]
+
+**The panel now follows your file explorer selection — no right-click needed.**
+
+- **Live explorer scoring** (new, on by default): select multiple notes in the file explorer
+  and the panel scores them together as you select; change the selection and the score
+  follows. Works up to 50 notes — folders and larger selections keep the right-click menu.
+  Uses the explorer's internal selection state (there is no public API), so if a future
+  Obsidian version changes it, the feature quietly falls back to the menu. Toggle in the
+  settings.
+- **Two flavours of selection view.** A *live* selection (made in the explorer) lets go by
+  itself: open a note outside it and the panel follows that note again. A *right-click*
+  score (selection or folder) is deliberate and stays pinned while you work in any document
+  — until you select something else in the explorer or hit "Back to current note". While
+  you walk the longest sentences within a selection, the list always stays put.
+- **One click instead of two**: clicking a sentence, paragraph or note in the side panel now
+  responds on the first click. (The first click used to focus the panel, which re-rendered
+  the list under your cursor before the click landed.)
+
 ## [0.3.0]
 
 **Score a whole selection of notes — and see exactly where the hard spots are.**

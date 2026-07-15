@@ -26,10 +26,11 @@ That's the whole entry fee. No account, no API key, nothing leaves your machine.
   **hardest paragraphs** (by LIX) and your **longest sentences** — click one and you jump
   straight to the culprit. You choose how many entries the lists show, reveal more with
   *Show more*, and can hide sentences below a word threshold.
-- **Score a folder or a selection of notes** — right-click in the file explorer: one combined
-  score over the selection, a per-note list sorted hardest-first (each note against its own
-  target), and the longest sentences across all of them — click to open that note at that
-  sentence.
+- **Score a folder or a selection of notes** — select notes in the file explorer and the
+  panel scores them together, live; change the selection and the score follows (right-click
+  menu for folders and larger sets). One combined score, a per-note list sorted hardest-first
+  (each note against its own target), and the longest sentences across all of them — click to
+  open that note at that sentence.
 - **Five commands** — open the panel · score the current note · score the selection · insert
   a readability report at the cursor (as a callout) · toggle the status bar.
 

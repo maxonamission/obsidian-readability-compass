@@ -882,6 +882,7 @@ var DEFAULT_SETTINGS = {
   wordsPerMinute: 225,
   topSentencesShown: 5,
   sentenceMinWords: 0,
+  followExplorerSelection: true,
   showStatusBar: true,
   statusBar: {
     lix: true,
@@ -992,6 +993,14 @@ var ReadabilityCompassSettingTab = class extends import_obsidian2.PluginSettingT
         this.plugin.settings.sentenceMinWords = value;
         await this.plugin.saveSettings();
       }
+    );
+    new import_obsidian2.Setting(containerEl).setName("Follow file explorer selections").setDesc(
+      "Select multiple notes in the file explorer and the panel scores them together, live \u2014 no right-click needed (up to 50 notes; folders and larger selections via the right-click menu). Live selections let go when you open a note outside them; right-click scores stay pinned until you select something else in the explorer."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.followExplorerSelection).onChange(async (value) => {
+        this.plugin.settings.followExplorerSelection = value;
+        await this.plugin.saveSettings();
+      })
     );
     new import_obsidian2.Setting(containerEl).setName("Include table text").setDesc(
       "Count the text inside Markdown tables \u2014 for notes that are tables, like question banks. Per note override: 'readability-tables: true' (or false) in the front matter. A manual selection always includes tables and code."
@@ -1269,7 +1278,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       text: "Back to current note",
       cls: "rc-back-button"
     });
-    this.registerDomEvent(back, "click", () => this.plugin.clearMultiReport());
+    this.registerDomEvent(back, "mousedown", () => this.plugin.clearMultiReport());
     const combined = multi.combined;
     const card = root.createDiv({ cls: "rc-card" });
     if (combined.lix === null) {
@@ -1318,7 +1327,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
         cls: "rc-count-value"
       });
       item.setAttribute("title", "Click to open this note");
-      this.registerDomEvent(item, "click", () => {
+      this.registerDomEvent(item, "mousedown", () => {
         void this.plugin.jumpToFileSpan(entry.file, { start: 0, end: 0 });
       });
     }
@@ -1357,7 +1366,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       });
       item.createSpan({ text: truncate(paragraph.text, 140) });
       item.setAttribute("title", "Click to jump to this paragraph");
-      this.registerDomEvent(item, "click", () => {
+      this.registerDomEvent(item, "mousedown", () => {
         this.plugin.jumpToSpan(paragraph);
       });
     }
@@ -1379,7 +1388,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       });
       item.createSpan({ text: truncate(sentence.text, 140) });
       item.setAttribute("title", "Click to jump to this sentence");
-      this.registerDomEvent(item, "click", () => {
+      this.registerDomEvent(item, "mousedown", () => {
         onClick(sentence, index);
       });
     });
@@ -1391,7 +1400,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       text: `Show more (${hidden} hidden)`,
       cls: "rc-show-more"
     });
-    this.registerDomEvent(button, "click", () => {
+    this.registerDomEvent(button, "mousedown", () => {
       var _a;
       this.extraEntries += SHOW_MORE_STEP;
       (_a = this.lastRender) == null ? void 0 : _a.call(this);
@@ -1404,6 +1413,7 @@ function truncate(text, max) {
 
 // src/main.ts
 var TOP_LIST_CAP = 50;
+var AUTO_FOLLOW_MAX_NOTES = 50;
 var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
@@ -1415,6 +1425,8 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     this.editorExtensions = [];
     /** When set, the panel shows this explorer selection instead of the active note. */
     this.multiReport = null;
+    /** Whether the current multi report came from auto-follow (vs the context menu). */
+    this.multiAuto = false;
   }
   async onload() {
     await this.loadSettings();
@@ -1437,7 +1449,7 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
         const notes = this.markdownFiles(files);
         if (notes.length < 2) return;
         menu.addItem(
-          (item) => item.setTitle(`Score readability of ${notes.length} notes`).setIcon("gauge").onClick(() => void this.scoreFiles(notes))
+          (item) => item.setTitle(`Score readability of ${notes.length} notes`).setIcon("gauge").onClick(() => void this.scoreFiles(notes, { reveal: true, auto: false }))
         );
       })
     );
@@ -1447,10 +1459,17 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
         const notes = this.markdownFiles([file]);
         if (notes.length === 0) return;
         menu.addItem(
-          (item) => item.setTitle(`Score readability of folder (${notes.length} notes)`).setIcon("gauge").onClick(() => void this.scoreFiles(notes))
+          (item) => item.setTitle(`Score readability of folder (${notes.length} notes)`).setIcon("gauge").onClick(() => void this.scoreFiles(notes, { reveal: true, auto: false }))
         );
       })
     );
+    const followSoon = (0, import_obsidian4.debounce)(() => void this.followExplorerSelection(), 300, true);
+    this.app.workspace.onLayoutReady(() => {
+      for (const leaf of this.app.workspace.getLeavesOfType("file-explorer")) {
+        this.registerDomEvent(leaf.view.containerEl, "click", followSoon);
+        this.registerDomEvent(leaf.view.containerEl, "keyup", followSoon);
+      }
+    });
     const refreshSoon = (0, import_obsidian4.debounce)(() => this.refreshUi(), 400, true);
     const refreshStatusSoon = (0, import_obsidian4.debounce)(() => this.refreshStatusBar(), 200, true);
     this.registerEvent(
@@ -1585,6 +1604,7 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
   // --- UI refresh ---------------------------------------------------------
   refreshUi() {
     var _a;
+    this.maybeReleaseMultiReport();
     const view = this.activeMarkdownView();
     const target = this.resolveTargetFor((_a = view == null ? void 0 : view.file) != null ? _a : null);
     const report = view === null ? null : this.analyzeView(view, target);
@@ -1654,7 +1674,40 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     for (const item of selection) walk(item);
     return notes;
   }
-  async scoreFiles(files) {
+  /**
+   * Explorer multi-selection via the file explorer's internal tree state —
+   * there is no public API for it. Typed narrowly and guarded, so a future
+   * Obsidian change degrades to "context menu only" instead of breaking.
+   */
+  explorerSelection() {
+    const files = [];
+    for (const leaf of this.app.workspace.getLeavesOfType("file-explorer")) {
+      const tree = leaf.view.tree;
+      const doms = tree == null ? void 0 : tree.selectedDoms;
+      if (!(doms instanceof Set)) continue;
+      for (const dom of doms) {
+        if (dom.file instanceof import_obsidian4.TFile && dom.file.extension === "md") {
+          files.push(dom.file);
+        }
+      }
+    }
+    return files;
+  }
+  /**
+   * Auto-score the explorer selection (BC_E1_S13); large sets stay on the
+   * menu. The explorer owns the multi view: any new selection replaces it,
+   * a single-file click releases it — also when it was pinned via the menu.
+   */
+  async followExplorerSelection() {
+    if (!this.settings.followExplorerSelection) return;
+    const files = this.explorerSelection();
+    if (files.length >= 2 && files.length <= AUTO_FOLLOW_MAX_NOTES) {
+      await this.scoreFiles(files, { reveal: false, auto: true });
+    } else if (this.multiReport !== null && files.length < 2) {
+      this.clearMultiReport();
+    }
+  }
+  async scoreFiles(files, options) {
     const rows = [];
     const sentences = [];
     const counts = [];
@@ -1693,12 +1746,35 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
       rows,
       sentences: sentences.slice(0, TOP_LIST_CAP)
     };
-    await this.activatePanel();
+    this.multiAuto = options.auto;
+    if (options.reveal) {
+      await this.activatePanel();
+    } else {
+      this.refreshUi();
+    }
   }
   /** Leave the explorer-selection view and follow the active note again. */
   clearMultiReport() {
     this.multiReport = null;
+    this.multiAuto = false;
     this.refreshUi();
+  }
+  /**
+   * Release rule for the editor side (BC_E1_S13, ontwerp eigenaar): a
+   * menu-pinned view stays while you work in any document — only the
+   * explorer (new selection, single click) or the Back button replaces it.
+   * A live-followed view lets go as soon as a note *outside* the selection
+   * gets focus; within the selection (walking its sentences) it stays.
+   */
+  maybeReleaseMultiReport() {
+    var _a;
+    if (this.multiReport === null || !this.multiAuto) return;
+    const file = (_a = this.app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView)) == null ? void 0 : _a.file;
+    if (file === void 0 || file === null) return;
+    if (!this.multiReport.rows.some((row) => row.file.path === file.path)) {
+      this.multiReport = null;
+      this.multiAuto = false;
+    }
   }
   /** Open a note (reusing its leaf when already open) and select a span. */
   async jumpToFileSpan(file, span) {
