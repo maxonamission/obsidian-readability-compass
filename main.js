@@ -383,6 +383,118 @@ var LANGUAGES = [
     // Franchina & Vacca (1972), the Italian adaptation of Flesch Reading
     // Ease (F = 206 − 0.65·syllables-per-100-words − words-per-sentence).
     flesch: { name: "Flesch-Vacca", base: 206, perWps: 1, perSpw: 65 }
+  },
+  {
+    code: "ru",
+    label: "Russian",
+    stopwords: /* @__PURE__ */ new Set([
+      "\u044D\u0442\u043E",
+      "\u0447\u0442\u043E",
+      "\u043A\u0430\u043A",
+      "\u0434\u043B\u044F",
+      "\u0435\u0433\u043E",
+      "\u043E\u043D\u0430",
+      "\u043E\u043D\u0438",
+      "\u043D\u043E",
+      "\u043D\u0435",
+      "\u0436\u0435",
+      "\u0431\u044B",
+      "\u0438\u043B\u0438",
+      "\u0442\u0430\u043A\u0436\u0435",
+      "\u043F\u043E\u0442\u043E\u043C\u0443",
+      "\u043A\u043E\u0433\u0434\u0430",
+      "\u0447\u0442\u043E\u0431\u044B",
+      "\u043E\u0447\u0435\u043D\u044C",
+      "\u0432\u0441\u0435\u0445",
+      "\u044D\u0442\u043E\u0442",
+      "\u043C\u043E\u0436\u0435\u0442"
+    ]),
+    // Russian syllables = number of vowels: every vowel starts its own
+    // group (adjacent vowels like поэт → по-эт count separately), so the
+    // whole vowel set is "marked".
+    countSyllables: makeVowelGroupCounter({
+      vowels: "\u0430\u0435\u0451\u0438\u043E\u0443\u044B\u044D\u044E\u044F",
+      marked: "\u0430\u0435\u0451\u0438\u043E\u0443\u044B\u044D\u044E\u044F"
+    }),
+    // Oborneva (2006), the Russian adaptation of Flesch Reading Ease.
+    flesch: { name: "Flesch-Oborneva", base: 206.835, perWps: 1.52, perSpw: 65.14 }
+  },
+  {
+    code: "tr",
+    label: "Turkish",
+    stopwords: /* @__PURE__ */ new Set([
+      "bir",
+      "bu",
+      "ve",
+      "i\xE7in",
+      "ile",
+      "\xE7ok",
+      "daha",
+      "gibi",
+      "kadar",
+      "sonra",
+      "ama",
+      "de\u011Fil",
+      "olan",
+      "olarak",
+      "her",
+      "ancak",
+      "veya",
+      "\u015Fey",
+      "di\u011Fer",
+      "hepsi"
+    ]),
+    // Turkish is (near-)phonemic: syllables = number of vowels, and vowel
+    // clusters like "saat" (sa-at) are two syllables, so every vowel is
+    // "marked" and counts on its own.
+    countSyllables: makeVowelGroupCounter({
+      vowels: "ae\u0131io\xF6u\xFC",
+      marked: "ae\u0131io\xF6u\xFC"
+    }),
+    // Ateşman (1997), the Turkish adaptation of Flesch Reading Ease. Its
+    // coefficients weight words-per-sentence and syllables-per-word
+    // differently from English, kept in their published slots.
+    flesch: { name: "Ate\u015Fman", base: 198.825, perWps: 2.61, perSpw: 40.175 }
+  },
+  {
+    code: "cs",
+    label: "Czech",
+    // Distinctive Czech function words; the ř/ě/ů/ž/č-carrying ones don't
+    // occur in the other registry languages, so detection is unambiguous.
+    stopwords: /* @__PURE__ */ new Set([
+      "\u017Ee",
+      "v\u0161ak",
+      "p\u0159ed",
+      "p\u0159i",
+      "p\u0159es",
+      "proto\u017Ee",
+      "m\u016F\u017Ee",
+      "je\u0161t\u011B",
+      "n\u011Bco",
+      "\u0159ekl",
+      "p\u0159ece",
+      "\u017E\xE1dn\xFD",
+      "co\u017E",
+      "\u010Di",
+      "jsem",
+      "jsou",
+      "u\u017E",
+      "tak\xE9",
+      "d\u011Bti",
+      "kter\xFD"
+    ]),
+    // Czech syllable nucleus = a vowel (accents and "ě" included);
+    // contiguous vowels form one group, so the diphthongs ou/au/eu count
+    // once. A vowelless word carried by a syllabic r/l (vlk, krk) falls
+    // back to 1. Off by ±1 on rare hiatus and syllabic consonants — LIX
+    // stays the main score.
+    countSyllables: makeVowelGroupCounter({ vowels: "a\xE1e\xE9\u011Bi\xEDo\xF3u\xFA\u016Fy\xFD" }),
+    // Bendová & Cinková (2021), a Flesch Reading Ease recalibration for
+    // Czech fitted on the InterCorp EN↔CS parallel corpus (TSD 2021 /
+    // Jazykovedný časopis 70(2)). The base is Flesch's 206.835 held fixed
+    // while the two coefficients were fitted (the paper misprints it as
+    // 206.935); the genuinely-Czech numbers are perWps 1.672, perSpw 62.18.
+    flesch: { name: "Flesch-Bendov\xE1", base: 206.835, perWps: 1.672, perSpw: 62.18 }
   }
 ];
 var LANGUAGE_BY_CODE = new Map(LANGUAGES.map((language) => [language.code, language]));

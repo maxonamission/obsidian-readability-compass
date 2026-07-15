@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0]
+
+**Russian, Turkish and Czech are now supported.** The secondary Flesch score covers three
+more languages, each with its published adaptation: **Flesch-Oborneva** for Russian (Oborneva,
+2006), the **Ateşman** formula for Turkish (Ateşman, 1997) and **Flesch-Bendová** for Czech
+(Bendová & Cinková, 2021 — a Flesch recalibration fitted on a Czech↔English parallel corpus).
+Ten languages now: English, Dutch, German, Spanish, French, Portuguese, Italian, Russian,
+Turkish and Czech. Russian and Turkish count syllables as the vowel count, which fits their
+near-phonemic orthographies (Turkish *saat* → sa-at is two syllables, Russian *поэт* → по-эт
+is two); Czech merges the diphthongs ou/au/eu into one. LIX, the main score, has always worked
+for any language that separates words with spaces — including Cyrillic — so this only adds the
+language-specific second opinion.
+
 ## [0.6.0]
 
 **Italian is now supported.** The secondary Flesch score covers Italian too, using the
