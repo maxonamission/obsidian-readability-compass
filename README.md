@@ -21,7 +21,7 @@ That's the whole entry fee. No account, no API key, nothing leaves your machine.
 - **Status bar, always on** — score, band, target check and word count, with configurable
   segments. Select text and it scores the selection. Click it to open the panel.
 - **Side panel — the why behind the verdict**: a score card (LIX, band, indicative CEFR
-  audience, target check), the published Flesch variant for your language (six supported),
+  audience, target check), the published Flesch variant for your language (seven supported),
   counts (words, sentences, words per sentence, long words, paragraphs, reading time), your
   **hardest paragraphs** (by LIX) and your **longest sentences** — click one and you jump
   straight to the culprit. You choose how many entries the lists show, reveal more with
@@ -71,8 +71,8 @@ A compass, not a co-author:
 - **A second opinion where one exists.** When the language is known (auto-detected, or fixed
   in the settings), the published Flesch variant is shown alongside: Flesch Reading Ease (en),
   Flesch-Douma (nl), Flesch-Amstad (de), Fernández-Huerta (es), Kandel-Moles (fr),
-  Flesch-Martins (pt). Their syllable counts are heuristic (±1 on tricky clusters); LIX stays
-  the main score.
+  Flesch-Martins (pt) and Flesch-Vacca (it). Their syllable counts are heuristic (±1 on
+  tricky clusters); LIX stays the main score.
   **Missing your language?**
   [Open a language request](https://github.com/maxonamission/obsidian-readability-compass/issues/new?title=Language%20request%3A%20&labels=language-request&body=%2A%2ALanguage%2A%2A%3A%20%0A%2A%2APublished%20readability%20formula%20for%20this%20language%20(if%20you%20know%20one%2C%20with%20a%20reference)%2A%2A%3A%20%0A%2A%2AAnything%20special%20about%20syllables%2Fword%20boundaries%20in%20this%20language%2A%2A%3A%20)
   — adding one is a single entry in the language registry (a stopword set, a syllable counter

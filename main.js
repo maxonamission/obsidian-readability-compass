@@ -351,6 +351,38 @@ var LANGUAGES = [
     }),
     // Martins et al. (1996), the Portuguese adaptation of Flesch Reading Ease.
     flesch: { name: "Flesch-Martins", base: 248.835, perWps: 1.015, perSpw: 84.6 }
+  },
+  {
+    code: "it",
+    label: "Italian",
+    stopwords: /* @__PURE__ */ new Set([
+      "il",
+      "gli",
+      "della",
+      "degli",
+      "nella",
+      "dello",
+      "sono",
+      "anche",
+      "perch\xE9",
+      "pi\xF9",
+      "questo",
+      "questa",
+      "quando",
+      "molto",
+      "come",
+      "con",
+      "che",
+      "non",
+      "delle",
+      "negli"
+    ]),
+    // Accents stay inside the vowel group (città, più), not a new group —
+    // Italian diphthongs (più, può) would otherwise over-count.
+    countSyllables: makeVowelGroupCounter({ vowels: "aeiou\xE0\xE8\xE9\xEC\xED\xF2\xF3\xF9\xFA" }),
+    // Franchina & Vacca (1972), the Italian adaptation of Flesch Reading
+    // Ease (F = 206 − 0.65·syllables-per-100-words − words-per-sentence).
+    flesch: { name: "Flesch-Vacca", base: 206, perWps: 1, perSpw: 65 }
   }
 ];
 var LANGUAGE_BY_CODE = new Map(LANGUAGES.map((language) => [language.code, language]));
@@ -1286,7 +1318,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       report.topSentences.map((span) => ({
         span,
         label: null,
-        onSelect: () => this.plugin.jumpToSpan(span)
+        onSelect: () => void this.plugin.jumpToSpan(span)
       }))
     );
     root.createEl("p", {
@@ -1391,7 +1423,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       item.createSpan({ text: truncate(paragraph.text, 140) });
       item.setAttribute("title", "Click to jump to this paragraph");
       this.registerDomEvent(item, "click", () => {
-        this.plugin.jumpToSpan(paragraph);
+        void this.plugin.jumpToSpan(paragraph);
       });
     }
     this.renderShowMore(root, paragraphs.length - budget);
@@ -1857,18 +1889,18 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     await leaf.openFile(file, { active: true });
     const view = leaf.view instanceof import_obsidian4.MarkdownView ? leaf.view : null;
     if (view === null) return;
+    await this.revealEditorOnMobile(leaf);
     if (span !== void 0) {
       this.applySpan(view, span);
     } else {
       view.setEphemeralState({ focus: true });
     }
-    this.revealEditorOnMobile(leaf);
   }
   /** On mobile the panel is a full-screen drawer; slide it away so the jump's editor shows. */
-  revealEditorOnMobile(leaf) {
+  async revealEditorOnMobile(leaf) {
     if (!import_obsidian4.Platform.isMobile) return;
     this.app.workspace.rightSplit.collapse();
-    void this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
   /** A markdown leaf to open a file in (see jumpToFileSpan). */
   resolveMarkdownLeaf(file) {
@@ -1898,11 +1930,11 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     this.refreshUi();
   }
   /** Select a span in the active note (offsets are document offsets). */
-  jumpToSpan(span) {
+  async jumpToSpan(span) {
     const view = this.activeMarkdownView();
     if (view === null) return;
+    await this.revealEditorOnMobile(view.leaf);
     this.applySpan(view, span);
-    this.revealEditorOnMobile(view.leaf);
   }
   /** Document offsets → a clamped editor range on the live editor. */
   spanToRange(editor, span) {

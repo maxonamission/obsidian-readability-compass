@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0]
+
+**Italian is now supported.** The secondary Flesch score covers Italian too, using the
+published **Flesch-Vacca** formula (Franchina & Vacca, 1972). Seven languages now:
+English, Dutch, German, Spanish, French, Portuguese and Italian. (LIX, the main score, has
+always worked for any language with spaces — this adds the language-specific second opinion.)
+
+**On mobile the jump now lands on the sentence, not just the note.** After the panel became
+tappable, the note opened but the sentence wasn't selected — the selection was applied before
+the sidebar slid away, so it was reset the moment the editor came to the front. The order is
+fixed: on mobile the editor is revealed first, then the sentence is selected and scrolled to.
+Desktop is unchanged.
+
 ## [0.5.1]
 
 **The panel works on mobile now.** Tapping a note, sentence or paragraph in the side panel
