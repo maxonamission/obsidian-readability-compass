@@ -1327,7 +1327,8 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
         cls: "rc-count-value"
       });
       item.setAttribute("title", "Click to open this note");
-      this.registerDomEvent(item, "mousedown", () => {
+      this.registerDomEvent(item, "mousedown", (evt) => {
+        evt.preventDefault();
         void this.plugin.jumpToFileSpan(entry.file, { start: 0, end: 0 });
       });
     }
@@ -1366,7 +1367,8 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       });
       item.createSpan({ text: truncate(paragraph.text, 140) });
       item.setAttribute("title", "Click to jump to this paragraph");
-      this.registerDomEvent(item, "mousedown", () => {
+      this.registerDomEvent(item, "mousedown", (evt) => {
+        evt.preventDefault();
         this.plugin.jumpToSpan(paragraph);
       });
     }
@@ -1388,7 +1390,8 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       });
       item.createSpan({ text: truncate(sentence.text, 140) });
       item.setAttribute("title", "Click to jump to this sentence");
-      this.registerDomEvent(item, "mousedown", () => {
+      this.registerDomEvent(item, "mousedown", (evt) => {
+        evt.preventDefault();
         onClick(sentence, index);
       });
     });
@@ -1810,6 +1813,7 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     editor.setSelection(from, to);
     editor.scrollIntoView({ from, to }, true);
     this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
+    editor.focus();
   }
   // --- Commands -----------------------------------------------------------
   addCommands() {

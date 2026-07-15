@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1]
+
+**Jumping to a sentence or paragraph now keeps its focus.** After 0.4.0's one-click change,
+clicking an entry in the panel would occasionally bounce focus straight back to the side
+panel — the note scrolled and selected, then the selection quietly sprang away. Cause: the
+panel's own mouse-down was still grabbing focus back off the editor, racily, so it only
+happened sometimes. The panel now yields that focus to the editor, and the jump ends by
+focusing the editor explicitly.
+
 ## [0.4.0]
 
 **The panel now follows your file explorer selection — no right-click needed.**
