@@ -1,7 +1,7 @@
 {
 	"id": "readability-compass",
 	"name": "Readability Compass",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"minAppVersion": "1.7.2",
 	"description": "Know the reading level of your notes and whether it fits your readers: one language-independent score (LIX), a CEFR-style target band you choose, always visible in the status bar, with a detail panel and commands.",
 	"author": "Max Kloosterman",

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.2]
+
+**Live updates while you edit — the panel and the inline marks keep up now.**
+
+- **A scored selection stays live.** When you score a folder or a set of notes and then edit
+  one of them, the combined score, the per-note list and the sentences now recompute as you
+  type (reading the live editor text, not the last-saved version). It used to freeze on the
+  first score.
+- **Inline marks no longer lag behind on a shortened sentence.** While typing continuously,
+  the long-sentence / long-word marks are now rebuilt on a bounded schedule instead of only
+  after you pause — so a mark can no longer stay stretched across into the next sentence when
+  you make a sentence shorter.
+
 ## [0.4.1]
 
 **Jumping to a sentence or paragraph now keeps its focus.** After 0.4.0's one-click change,

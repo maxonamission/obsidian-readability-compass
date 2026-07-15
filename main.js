@@ -680,7 +680,8 @@ function longWordRanges(markdown, strip = {}) {
 }
 
 // src/editor-highlight.ts
-var REBUILD_DEBOUNCE_MS = 250;
+var REBUILD_DEBOUNCE_MS = 180;
+var MAX_REBUILD_WAIT_MS = 500;
 var rebuildMarks = import_state.StateEffect.define();
 var LONG_MARK = import_view.Decoration.mark({ class: "rc-long-sentence" });
 var VERY_LONG_MARK = import_view.Decoration.mark({ class: "rc-long-sentence rc-very-long-sentence" });
@@ -717,7 +718,10 @@ function longSentenceExtension(plugin) {
   class LongSentenceMarks {
     constructor(view) {
       this.view = view;
+      /** Fires after a typing pause. */
       this.timer = null;
+      /** Guarantees a rebuild during continuous typing. */
+      this.maxTimer = null;
       this.decorations = build(view);
     }
     update(update) {
@@ -726,6 +730,7 @@ function longSentenceExtension(plugin) {
       );
       if (forced) {
         this.decorations = build(update.view);
+        this.clearTimers();
         return;
       }
       if (update.docChanged) {
@@ -734,14 +739,28 @@ function longSentenceExtension(plugin) {
       }
     }
     destroy() {
-      if (this.timer !== null) window.clearTimeout(this.timer);
+      this.clearTimers();
+    }
+    clearTimers() {
+      if (this.timer !== null) {
+        window.clearTimeout(this.timer);
+        this.timer = null;
+      }
+      if (this.maxTimer !== null) {
+        window.clearTimeout(this.maxTimer);
+        this.maxTimer = null;
+      }
     }
     schedule() {
       if (this.timer !== null) window.clearTimeout(this.timer);
-      this.timer = window.setTimeout(() => {
-        this.timer = null;
-        this.view.dispatch({ effects: rebuildMarks.of(null) });
-      }, REBUILD_DEBOUNCE_MS);
+      this.timer = window.setTimeout(() => this.fire(), REBUILD_DEBOUNCE_MS);
+      if (this.maxTimer === null) {
+        this.maxTimer = window.setTimeout(() => this.fire(), MAX_REBUILD_WAIT_MS);
+      }
+    }
+    fire() {
+      this.clearTimers();
+      this.view.dispatch({ effects: rebuildMarks.of(null) });
     }
   }
   return import_view.ViewPlugin.fromClass(LongSentenceMarks, {
@@ -1473,7 +1492,7 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
         this.registerDomEvent(leaf.view.containerEl, "keyup", followSoon);
       }
     });
-    const refreshSoon = (0, import_obsidian4.debounce)(() => this.refreshUi(), 400, true);
+    const refreshSoon = (0, import_obsidian4.debounce)(() => void this.editedRefresh(), 400, true);
     const refreshStatusSoon = (0, import_obsidian4.debounce)(() => this.refreshStatusBar(), 200, true);
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => this.refreshUi())
@@ -1605,6 +1624,33 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     return { words: report.words, lix: report.lix };
   }
   // --- UI refresh ---------------------------------------------------------
+  /**
+   * Refresh after an edit. A live explorer-selection report is recomputed in
+   * place when you edit one of its notes (it used to freeze on first score,
+   * BC_E1_S14); otherwise the usual single-note refresh runs.
+   */
+  async editedRefresh() {
+    var _a;
+    if (this.multiReport !== null) {
+      const active = (_a = this.app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView)) == null ? void 0 : _a.file;
+      const inSet = active != null && this.multiReport.rows.some((row) => row.file.path === active.path);
+      if (inSet) {
+        await this.rescoreMulti();
+        return;
+      }
+    }
+    this.refreshUi();
+  }
+  /** Recompute the active explorer-selection report from the notes' current text. */
+  async rescoreMulti() {
+    if (this.multiReport === null) return;
+    const files = this.multiReport.rows.map((row) => row.file).filter((file) => this.app.vault.getAbstractFileByPath(file.path) instanceof import_obsidian4.TFile);
+    if (files.length < 1) {
+      this.clearMultiReport();
+      return;
+    }
+    await this.scoreFiles(files, { reveal: false, auto: this.multiAuto });
+  }
   refreshUi() {
     var _a;
     this.maybeReleaseMultiReport();
@@ -1710,12 +1756,23 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
       this.clearMultiReport();
     }
   }
+  /** An open note's live editor buffer (ahead of disk while editing); else the vault copy. */
+  async readFileText(file) {
+    var _a;
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view instanceof import_obsidian4.MarkdownView && ((_a = view.file) == null ? void 0 : _a.path) === file.path) {
+        return view.editor.getValue();
+      }
+    }
+    return this.app.vault.cachedRead(file);
+  }
   async scoreFiles(files, options) {
     const rows = [];
     const sentences = [];
     const counts = [];
     for (const file of files) {
-      const content = await this.app.vault.cachedRead(file);
+      const content = await this.readFileText(file);
       const target = this.resolveTargetFor(file);
       const report = analyzeMarkdown(content, {
         ...this.analyzeOptions(target, file),
