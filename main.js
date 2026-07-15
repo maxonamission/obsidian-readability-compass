@@ -430,13 +430,18 @@ function fleschLabel(score) {
 // src/readability/analyze.ts
 var DEFAULT_TOP_SENTENCES = 5;
 var MIN_PARAGRAPH_WORDS = 20;
-function paragraphBlocks(clean) {
+var LIST_LINE_RE = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/;
+function paragraphBlocks(clean, original) {
+  var _a;
   const blocks = [];
+  const sourceLines = original.split("\n");
   let offset = 0;
   let start = -1;
   let end = -1;
+  let index = 0;
   for (const line of clean.split("\n")) {
-    if (/\S/.test(line)) {
+    const isProse = /\S/.test(line) && !LIST_LINE_RE.test((_a = sourceLines[index]) != null ? _a : "");
+    if (isProse) {
       if (start === -1) start = offset;
       end = offset + line.length;
     } else if (start !== -1) {
@@ -444,13 +449,14 @@ function paragraphBlocks(clean) {
       start = -1;
     }
     offset += line.length + 1;
+    index++;
   }
   if (start !== -1) blocks.push({ start, end });
   return blocks;
 }
-function topParagraphs(clean, count) {
+function topParagraphs(clean, original, count) {
   const spans = [];
-  for (const block of paragraphBlocks(clean)) {
+  for (const block of paragraphBlocks(clean, original)) {
     const text = clean.slice(block.start, block.end);
     const words = extractWords(text);
     if (words.length < MIN_PARAGRAPH_WORDS) continue;
@@ -517,7 +523,7 @@ function analyzeMarkdown(markdown, options) {
     flesch,
     readingMinutes: wordCount / Math.max(1, options.wordsPerMinute),
     topSentences,
-    topParagraphs: topParagraphs(clean, topCount),
+    topParagraphs: topParagraphs(clean, markdown, topCount),
     onTarget: lix === null ? null : lix <= options.targetMaxLix,
     targetMaxLix: options.targetMaxLix,
     minWords: options.minWords,
@@ -1184,6 +1190,8 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
     this.renderedSubject = null;
     /** Last render inputs, so "Show more" can re-render in place. */
     this.lastRender = null;
+    /** The multi report currently on screen; used to skip a mid-jump rebuild (BC_E1_S16). */
+    this.renderedMulti = null;
   }
   getViewType() {
     return VIEW_TYPE_READABILITY;
@@ -1211,6 +1219,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
   render(report, fileName, target = null) {
     var _a, _b, _c;
     this.resetForSubject(`file:${fileName != null ? fileName : ""}`);
+    this.renderedMulti = null;
     this.lastRender = () => this.render(report, fileName, target);
     const root = this.contentEl;
     root.empty();
@@ -1272,11 +1281,13 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
     row("Paragraphs", String(report.paragraphs));
     row("Reading time", formatReadingTime(report.readingMinutes));
     this.renderParagraphs(root, report.topParagraphs);
-    this.renderSentences(
+    this.renderSentenceList(
       root,
-      report.topSentences,
-      (span) => this.plugin.jumpToSpan(span),
-      null
+      report.topSentences.map((span) => ({
+        span,
+        label: null,
+        onSelect: () => this.plugin.jumpToSpan(span)
+      }))
     );
     root.createEl("p", {
       text: report.tablesIncluded ? "Measured on running text incl. tables \u2014 front matter, code, links and URLs are excluded." : "Measured on running text \u2014 front matter, code, tables, links and URLs are excluded.",
@@ -1286,6 +1297,8 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
   // --- Explorer selection (BC_E1_S10) ----------------------------------------
   renderMulti(multi) {
     var _a, _b;
+    if (this.renderedMulti === multi) return;
+    this.renderedMulti = multi;
     this.resetForSubject(`multi:${multi.rows.map((r) => r.file.path).join("|")}`);
     this.lastRender = () => this.renderMulti(multi);
     const root = this.contentEl;
@@ -1348,29 +1361,21 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       item.setAttribute("title", "Click to open this note");
       this.registerDomEvent(item, "mousedown", (evt) => {
         evt.preventDefault();
-        void this.plugin.jumpToFileSpan(entry.file, { start: 0, end: 0 });
+        void this.plugin.jumpToFileSpan(entry.file);
       });
     }
-    this.renderSentences(
+    this.renderSentenceList(
       root,
-      multi.sentences.map((entry) => entry.span),
-      (_span, index) => {
-        const entry = this.visibleMultiSentences(multi)[index];
-        void this.plugin.jumpToFileSpan(entry.file, entry.span);
-      },
-      (index) => {
-        var _a2, _b2;
-        return (_b2 = (_a2 = this.visibleMultiSentences(multi)[index]) == null ? void 0 : _a2.file.basename) != null ? _b2 : null;
-      }
+      multi.sentences.map((entry) => ({
+        span: entry.span,
+        label: entry.file.basename,
+        onSelect: () => void this.plugin.jumpToFileSpan(entry.file, entry.span)
+      }))
     );
     root.createEl("p", {
       text: "Combined over the selected notes; per-note targets apply to the marks.",
       cls: "rc-footnote"
     });
-  }
-  visibleMultiSentences(multi) {
-    const minWords = this.plugin.settings.sentenceMinWords;
-    return multi.sentences.filter((entry) => entry.span.words > Math.max(1, minWords));
   }
   // --- Shared list sections ---------------------------------------------------
   renderParagraphs(root, paragraphs) {
@@ -1393,27 +1398,32 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
     }
     this.renderShowMore(root, paragraphs.length - budget);
   }
-  renderSentences(root, sentences, onClick, fileLabel) {
+  /**
+   * The longest-sentences list. Each entry carries its own jump closure
+   * (file + offsets captured here at render time), so two byte-identical
+   * sentences — even across two files — can never resolve to the wrong one
+   * (BC_E1_S16). One min-words filter, one place.
+   */
+  renderSentenceList(root, entries) {
     const minWords = Math.max(1, this.plugin.settings.sentenceMinWords);
-    const offenders = sentences.filter((span) => span.words > minWords);
+    const offenders = entries.filter((entry) => entry.span.words > minWords);
     if (offenders.length === 0) return;
     const budget = this.listBudget();
     root.createDiv({ text: "Longest sentences", cls: "rc-section-title" });
     const list = root.createEl("ol", { cls: "rc-sentences" });
-    offenders.slice(0, budget).forEach((sentence, index) => {
+    for (const entry of offenders.slice(0, budget)) {
       const item = list.createEl("li", { cls: "rc-sentence" });
-      const label = fileLabel == null ? void 0 : fileLabel(index);
       item.createSpan({
-        text: `${sentence.words} w \xB7 ${label !== null && label !== void 0 ? `${label} \xB7 ` : ""}`,
+        text: `${entry.span.words} w \xB7 ${entry.label !== null ? `${entry.label} \xB7 ` : ""}`,
         cls: "rc-sentence-words"
       });
-      item.createSpan({ text: truncate(sentence.text, 140) });
+      item.createSpan({ text: truncate(entry.span.text, 140) });
       item.setAttribute("title", "Click to jump to this sentence");
       this.registerDomEvent(item, "mousedown", (evt) => {
         evt.preventDefault();
-        onClick(sentence, index);
+        entry.onSelect();
       });
-    });
+    }
     this.renderShowMore(root, offenders.length - budget);
   }
   renderShowMore(root, hidden) {
@@ -1422,9 +1432,11 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
       text: `Show more (${hidden} hidden)`,
       cls: "rc-show-more"
     });
-    this.registerDomEvent(button, "mousedown", () => {
+    this.registerDomEvent(button, "mousedown", (evt) => {
       var _a;
+      evt.preventDefault();
       this.extraEntries += SHOW_MORE_STEP;
+      this.renderedMulti = null;
       (_a = this.lastRender) == null ? void 0 : _a.call(this);
     });
   }
@@ -1836,12 +1848,35 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
       this.multiAuto = false;
     }
   }
-  /** Open a note (reusing its leaf when already open) and select a span. */
+  /**
+   * Open a note and, if a span is given, select it. Reuses a leaf already
+   * showing the file, else a real editor leaf in the root split, else a fresh
+   * tab — never the sidebar (BC_E1_S16).
+   */
   async jumpToFileSpan(file, span) {
-    const leaf = this.app.workspace.getLeaf(false);
-    await leaf.openFile(file);
+    const leaf = this.resolveMarkdownLeaf(file);
+    await leaf.openFile(file, { active: true });
     const view = leaf.view instanceof import_obsidian4.MarkdownView ? leaf.view : null;
-    if (view !== null) this.selectSpanIn(view, span);
+    if (view === null) return;
+    if (span !== void 0) {
+      this.applySpan(view, span);
+    } else {
+      view.setEphemeralState({ focus: true });
+    }
+  }
+  /** A markdown leaf to open a file in (see jumpToFileSpan). */
+  resolveMarkdownLeaf(file) {
+    var _a;
+    const { workspace } = this.app;
+    for (const leaf of workspace.getLeavesOfType("markdown")) {
+      if (((_a = leaf.getViewState().state) == null ? void 0 : _a.file) === file.path) return leaf;
+    }
+    const recent = workspace.getMostRecentLeaf(workspace.rootSplit);
+    if (recent !== null && recent.getViewState().pinned !== true) {
+      const type = recent.getViewState().type;
+      if (type === "markdown" || type === "empty") return recent;
+    }
+    return workspace.getLeaf("tab");
   }
   // --- Panel handling -----------------------------------------------------
   async activatePanel() {
@@ -1856,21 +1891,41 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
     await workspace.revealLeaf(leaf);
     this.refreshUi();
   }
-  /** Jump the last active editor to a span (offsets are document offsets). */
+  /** Select a span in the active note (offsets are document offsets). */
   jumpToSpan(span) {
     const view = this.activeMarkdownView();
     if (view === null) return;
-    this.selectSpanIn(view, span);
+    this.applySpan(view, span);
   }
-  selectSpanIn(view, span) {
-    const editor = view.editor;
+  /** Document offsets → a clamped editor range on the live editor. */
+  spanToRange(editor, span) {
     const length = editor.getValue().length;
-    const from = editor.offsetToPos(Math.min(span.start, length));
-    const to = editor.offsetToPos(Math.min(span.end, length));
-    editor.setSelection(from, to);
-    editor.scrollIntoView({ from, to }, true);
-    this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
-    editor.focus();
+    return {
+      from: editor.offsetToPos(Math.min(span.start, length)),
+      to: editor.offsetToPos(Math.min(span.end, length))
+    };
+  }
+  /**
+   * Select and reveal a span via Obsidian's native ephemeral state (which
+   * scrolls, selects and focuses atomically — the way core search/backlink
+   * navigation does it), then re-assert once on the next frame in case the
+   * post-open state restore overwrote it. Last writer wins, so the jump is
+   * deterministic instead of racing focus (BC_E1_S16).
+   */
+  applySpan(view, span) {
+    const editor = view.editor;
+    view.setEphemeralState({ cursor: this.spanToRange(editor, span), focus: true });
+    window.requestAnimationFrame(() => {
+      if (view.leaf.view !== view) return;
+      const target = this.spanToRange(editor, span);
+      const selection = editor.listSelections()[0];
+      const matches = selection !== void 0 && editor.posToOffset(selection.anchor) === editor.posToOffset(target.from) && editor.posToOffset(selection.head) === editor.posToOffset(target.to);
+      if (!matches) {
+        editor.setSelection(target.from, target.to);
+        editor.scrollIntoView(target, true);
+        editor.focus();
+      }
+    });
   }
   // --- Commands -----------------------------------------------------------
   addCommands() {

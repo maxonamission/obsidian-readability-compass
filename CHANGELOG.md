@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0]
+
+**Clicking a sentence or paragraph in the panel now lands reliably — every time.** The
+jump-to-sentence was redesigned from the ground up. It now uses Obsidian's own navigation
+(the mechanism behind search-result and backlink jumps) to scroll, select and focus in one
+atomic step, instead of hand-rolling those and racing the app's own state restore — which is
+why the selection used to "not appear" at random. In a multi-note selection the panel opens
+the file in its existing tab (never a copy in the wrong pane) and each list entry now carries
+its own file + position, so two byte-identical sentences across two notes can never jump to
+the wrong one.
+
+**Lists are no longer mistaken for a hard paragraph.** A bullet or numbered list is terse by
+design — telegraphic, keyword-dense — so its LIX looks high, and a tight list used to show up
+in *Hardest paragraphs* as one big entry. The hardest-paragraphs ranking now skips list items
+entirely (bulleted, numbered and nested lists alike), so it points you at real prose blocks.
+The note's overall score is unchanged — list text still counts toward it, and a genuinely long
+sentence inside a bullet still shows up under *Longest sentences*.
+
 ## [0.4.2]
 
 **Live updates while you edit — the panel and the inline marks keep up now.**
