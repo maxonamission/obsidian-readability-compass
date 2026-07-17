@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.3]
+
+**Release provenance fix (no functional changes).** The build assets now carry a version
+marker — `main.js` a version banner, `styles.css` a version header — so each release's asset
+digests are unique to that version. This stops a release's build-provenance attestation from
+sharing a digest with an older version's attestation, which is what made the community-directory
+review reject `main.js` and `styles.css` on a stale attestation. Also drops the third-party
+`builtin-modules` build dependency in favour of Node's own `module.builtinModules`. The plugin
+itself is unchanged from 0.8.1.
+
 ## [0.8.2]
 
 **Release provenance fix (no functional changes).** The build-provenance attestation on the
