@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.4]
+
+**The settings are now searchable on Obsidian 1.13+.** The settings tab adopted Obsidian's
+declarative settings API, so every option — target audience, marking, status bar segments,
+the lot — shows up in Obsidian's settings search on 1.13 and newer. There, sliders show
+their value natively and the tag/folder rule lists use the native add/delete affordances.
+On older Obsidian versions nothing changes: the tab keeps its classic rendering, and the
+plugin still runs on Obsidian 1.7.2+. No options were added, removed or renamed.
+
 ## [0.8.3]
 
 **Release provenance fix (no functional changes).** The build assets now carry a version

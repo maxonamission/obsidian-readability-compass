@@ -1,4 +1,4 @@
-/* Readability Compass — v0.8.3 */
+/* Readability Compass — v0.8.4 */
 
 .rc-status {
 	color: var(--text-muted);
@@ -144,8 +144,8 @@
 	background-color: rgba(var(--color-red-rgb), 0.12);
 }
 
-/* Owner-test round 1 (BC_E1_S8) */
-
+/* Waarde-label van de legacy-slider (Obsidian < 1.13; BC_E1_S8/S27).
+   Op 1.13+ toont de declaratieve slider zijn waarde via displayFormat. */
 .rc-slider-value {
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
