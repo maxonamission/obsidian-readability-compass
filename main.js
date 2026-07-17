@@ -195,7 +195,34 @@ var LANGUAGES = [
     ]),
     countSyllables: countSyllablesNl,
     // Douma (1960), the Dutch adaptation of Flesch Reading Ease.
-    flesch: { name: "Flesch-Douma", base: 206.84, perWps: 0.93, perSpw: 77 }
+    flesch: { name: "Flesch-Douma", base: 206.84, perWps: 0.93, perSpw: 77 },
+    connectives: /* @__PURE__ */ new Set([
+      "echter",
+      "daarom",
+      "omdat",
+      "hoewel",
+      "bovendien",
+      "daarnaast",
+      "bijgevolg",
+      "ondertussen",
+      "niettemin",
+      "desondanks",
+      "terwijl",
+      "immers",
+      "anderzijds",
+      "enerzijds",
+      "vervolgens",
+      "namelijk",
+      "zodat",
+      "doordat",
+      "waardoor",
+      "kortom",
+      "bijvoorbeeld",
+      "aangezien",
+      "tevens",
+      "eveneens",
+      "weliswaar"
+    ])
   },
   {
     code: "en",
@@ -224,7 +251,36 @@ var LANGUAGES = [
     ]),
     countSyllables: countSyllablesEn,
     // Flesch (1948), the original Reading Ease formula.
-    flesch: { name: "Flesch", base: 206.835, perWps: 1.015, perSpw: 84.6 }
+    flesch: { name: "Flesch", base: 206.835, perWps: 1.015, perSpw: 84.6 },
+    connectives: /* @__PURE__ */ new Set([
+      "however",
+      "therefore",
+      "because",
+      "although",
+      "though",
+      "moreover",
+      "furthermore",
+      "consequently",
+      "meanwhile",
+      "nevertheless",
+      "nonetheless",
+      "thus",
+      "hence",
+      "whereas",
+      "besides",
+      "instead",
+      "otherwise",
+      "similarly",
+      "accordingly",
+      "additionally",
+      "conversely",
+      "specifically",
+      "indeed",
+      "likewise",
+      "subsequently",
+      "ultimately",
+      "regardless"
+    ])
   },
   {
     code: "de",
@@ -675,6 +731,177 @@ function analyzeMarkdown(markdown, options) {
   };
 }
 
+// src/readability/structure.ts
+var HEADING_RE = /^(#{1,6})\s+\S/;
+var LIST_RE = /^\s*(?:[-*+]|\d+[.)])\s+/;
+var ORDERED_RE = /^\s*\d+[.)]\s+/;
+var TABLE_RE = /^\s*\|.*\|/;
+var FENCE_RE2 = /^\s*(?:```|~~~)/;
+var WALL_WORDS = 250;
+var PROSE_LIST_MAX = 0.15;
+var REFERENCE_LIST_MIN = 0.4;
+var PROCEDURAL_ORDERED_MIN = 0.15;
+var MIN_CONTENT_LETTERS = 3;
+function bodyLines(markdown) {
+  const lines = markdown.split("\n");
+  const out = [];
+  let inFrontMatter = false;
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (i === 0 && /^---\s*$/.test(line)) {
+      inFrontMatter = true;
+      continue;
+    }
+    if (inFrontMatter) {
+      if (/^---\s*$/.test(line)) inFrontMatter = false;
+      continue;
+    }
+    if (FENCE_RE2.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const heading = HEADING_RE.exec(line);
+    out.push({
+      text: line,
+      isHeading: heading !== null,
+      headingLevel: heading !== null ? heading[1].length : 0,
+      isList: LIST_RE.test(line),
+      isOrdered: ORDERED_RE.test(line),
+      isTable: TABLE_RE.test(line)
+    });
+  }
+  return out;
+}
+function analyzeHeadings(body) {
+  const levels = body.filter((l) => l.isHeading).map((l) => l.headingLevel);
+  let skips = false;
+  for (let i = 1; i < levels.length; i++) {
+    if (levels[i] > levels[i - 1] + 1) skips = true;
+  }
+  return {
+    count: levels.length,
+    maxDepth: levels.length === 0 ? 0 : Math.max(...levels),
+    skips
+  };
+}
+function analyzeSections(body) {
+  const sectionWordCounts = [];
+  let current = [];
+  const flush = () => {
+    if (current.length === 0) return;
+    const words = extractWords(stripMarkdown(current.join("\n"), {})).length;
+    if (words > 0) sectionWordCounts.push(words);
+    current = [];
+  };
+  for (const line of body) {
+    if (line.isHeading) {
+      flush();
+    } else {
+      current.push(line.text);
+    }
+  }
+  flush();
+  return {
+    count: sectionWordCounts.length,
+    longestWords: sectionWordCounts.length === 0 ? 0 : Math.max(...sectionWordCounts),
+    wallOfText: sectionWordCounts.filter((w) => w > WALL_WORDS).length
+  };
+}
+function listRatio(body) {
+  const content = body.filter((l) => !l.isHeading && l.text.trim() !== "");
+  if (content.length === 0) return 0;
+  const listy = content.filter((l) => l.isList || l.isTable).length;
+  return listy / content.length;
+}
+function orderedRatio(body) {
+  const content = body.filter((l) => !l.isHeading && l.text.trim() !== "");
+  if (content.length === 0) return 0;
+  return content.filter((l) => l.isOrdered).length / content.length;
+}
+function cohesion(clean, stopwords) {
+  const sets = splitSentences(clean).map((sentence) => contentWords(sentence.text, stopwords)).filter((set) => set.size > 0);
+  if (sets.length < 2) return null;
+  let total = 0;
+  let pairs = 0;
+  for (let i = 1; i < sets.length; i++) {
+    const a = sets[i - 1];
+    const b = sets[i];
+    let shared = 0;
+    for (const word of a) if (b.has(word)) shared++;
+    total += shared / Math.min(a.size, b.size);
+    pairs++;
+  }
+  return pairs === 0 ? null : total / pairs;
+}
+function contentWords(text, stopwords) {
+  const set = /* @__PURE__ */ new Set();
+  for (const word of extractWords(text)) {
+    const lower = word.toLowerCase();
+    if (lower.length > MIN_CONTENT_LETTERS && !stopwords.has(lower)) set.add(lower);
+  }
+  return set;
+}
+function connectiveRatio(clean, connectives) {
+  if (connectives === void 0 || connectives.size === 0) return null;
+  const sentences = splitSentences(clean);
+  if (sentences.length === 0) return null;
+  let hits = 0;
+  for (const sentence of sentences) {
+    const has = extractWords(sentence.text).some(
+      (word) => connectives.has(word.toLowerCase())
+    );
+    if (has) hits++;
+  }
+  return hits / sentences.length;
+}
+function expectedCluster(declared) {
+  switch (declared) {
+    case "tutorial":
+    case "how-to":
+    case "howto":
+      return "procedural";
+    case "reference":
+      return "reference";
+    case "explanation":
+      return "explanation";
+    default:
+      return null;
+  }
+}
+function classifyCluster(list, ordered) {
+  if (ordered >= PROCEDURAL_ORDERED_MIN) return "procedural";
+  if (list >= REFERENCE_LIST_MIN) return "reference";
+  if (list <= PROSE_LIST_MAX) return "explanation";
+  return "mixed";
+}
+function diataxisFit(declaredRaw, list, ordered) {
+  if (declaredRaw == null || declaredRaw.trim() === "") return null;
+  const declared = declaredRaw.trim().toLowerCase();
+  const expected = expectedCluster(declared);
+  const looksLike = classifyCluster(list, ordered);
+  const matches = expected === null || looksLike === "mixed" || looksLike === expected;
+  return { declared, looksLike, matches };
+}
+function analyzeStructure(markdown, options) {
+  var _a;
+  const body = bodyLines(markdown);
+  const clean = stripMarkdown(markdown, {});
+  const definition = options.language === "unknown" ? void 0 : LANGUAGE_BY_CODE.get(options.language);
+  const stopwords = (_a = definition == null ? void 0 : definition.stopwords) != null ? _a : /* @__PURE__ */ new Set();
+  const list = listRatio(body);
+  const ordered = orderedRatio(body);
+  return {
+    headings: analyzeHeadings(body),
+    sections: analyzeSections(body),
+    listRatio: list,
+    cohesion: cohesion(clean, stopwords),
+    connectives: connectiveRatio(clean, definition == null ? void 0 : definition.connectives),
+    diataxis: diataxisFit(options.declaredDiataxis, list, ordered)
+  };
+}
+
 // src/readability/aggregate.ts
 function combineCounts(files, minWords, wordsPerMinute) {
   const words = files.reduce((sum, file) => sum + file.words, 0);
@@ -1046,6 +1273,7 @@ var DEFAULT_SETTINGS = {
   markingFollowsTarget: true,
   markingThreshold: 25,
   markLongWords: false,
+  showStructureHints: false,
   includeTables: false,
   minWords: 40,
   wordsPerMinute: 225,
@@ -1219,6 +1447,14 @@ var ReadabilityCompassSettingTab = class extends import_obsidian2.PluginSettingT
         await this.plugin.saveSettings();
       })
     );
+    new import_obsidian2.Setting(containerEl).setName("Show structure & cohesion hints (experimental)").setDesc(
+      "Adds a panel section with descriptive structure and cohesion hints (heading structure, adjacent-sentence overlap, connective density, and a Di\xE1taxis-type match). These complement LIX \u2014 they are hints, not a score, and never a pass/fail verdict."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.showStructureHints).onChange(async (value) => {
+        this.plugin.settings.showStructureHints = value;
+        await this.plugin.saveSettings();
+      })
+    );
     this.addLabelledSlider(
       new import_obsidian2.Setting(containerEl).setName("Reading speed").setDesc("Words per minute, used for the reading time estimate."),
       { min: 100, max: 400, step: 25 },
@@ -1360,11 +1596,11 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
     }
   }
   // --- Single note ----------------------------------------------------------
-  render(report, fileName, target = null) {
+  render(report, fileName, target = null, structure = null) {
     var _a, _b, _c;
     this.resetForSubject(`file:${fileName != null ? fileName : ""}`);
     this.renderedMulti = null;
-    this.lastRender = () => this.render(report, fileName, target);
+    this.lastRender = () => this.render(report, fileName, target, structure);
     const root = this.contentEl;
     root.empty();
     root.addClass("rc-panel");
@@ -1433,6 +1669,7 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
         onSelect: () => void this.plugin.jumpToSpan(span)
       }))
     );
+    if (structure !== null) this.renderStructure(root, structure);
     root.createEl("p", {
       text: report.tablesIncluded ? "Measured on running text incl. tables \u2014 front matter, code, links and URLs are excluded." : "Measured on running text \u2014 front matter, code, tables, links and URLs are excluded.",
       cls: "rc-footnote"
@@ -1517,6 +1754,51 @@ var ReadabilityPanelView = class extends import_obsidian3.ItemView {
     );
     root.createEl("p", {
       text: "Combined over the selected notes; per-note targets apply to the marks.",
+      cls: "rc-footnote"
+    });
+  }
+  // --- Structure & cohesion (experimental, BC_E1_S23) ------------------------
+  /**
+   * Descriptive structure/cohesion hints. Deliberately *not* part of the LIX
+   * verdict and never pass/fail — the "right" amount of cohesion depends on the
+   * audience, which the plugin cannot measure (see verkenning §6).
+   */
+  renderStructure(root, s) {
+    root.createDiv({ text: "Structure & cohesion", cls: "rc-section-title" });
+    const box = root.createDiv({ cls: "rc-counts" });
+    const row = (label, value) => {
+      const el = box.createDiv({ cls: "rc-count-row" });
+      el.createSpan({ text: label, cls: "rc-count-label" });
+      el.createSpan({ text: value, cls: "rc-count-value" });
+    };
+    if (s.cohesion !== null) {
+      const pct = Math.round(s.cohesion * 100);
+      const note = s.cohesion < 0.15 ? " \u2014 sentences often shift topic" : "";
+      row("Sentence-to-sentence overlap", `${pct}%${note}`);
+    }
+    if (s.connectives !== null) {
+      row("Connective density", `${Math.round(s.connectives * 100)}%`);
+    }
+    const structureBits = [`${s.headings.count} (depth ${s.headings.maxDepth})`];
+    if (s.headings.skips) structureBits.push("skipped level");
+    row("Headings", structureBits.join(" \xB7 "));
+    if (s.sections.wallOfText > 0) {
+      row(
+        "Long sections (no subheading)",
+        `${s.sections.wallOfText} \xB7 up to ${s.sections.longestWords} w`
+      );
+    }
+    if (s.diataxis !== null) {
+      const d = s.diataxis;
+      const el = box.createDiv({ cls: "rc-count-row" });
+      el.createSpan({ text: "Di\xE1taxis fit", cls: "rc-count-label" });
+      el.createSpan({
+        text: d.matches ? `matches '${d.declared}'` : `declared '${d.declared}', reads as ${d.looksLike}`,
+        cls: d.matches ? "rc-count-value rc-target-ok" : "rc-count-value rc-target-off"
+      });
+    }
+    root.createEl("p", {
+      text: "Descriptive hints, not part of the LIX score \u2014 structure and cohesion are a separate axis the formulas miss.",
       cls: "rc-footnote"
     });
   }
@@ -1854,15 +2136,34 @@ var ReadabilityCompassPlugin = class extends import_obsidian4.Plugin {
   renderPanels(view, report, target) {
     var _a, _b;
     const fileName = (_b = (_a = view == null ? void 0 : view.file) == null ? void 0 : _a.basename) != null ? _b : null;
+    const structure = this.structureFor(view, report);
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_READABILITY)) {
       if (leaf.view instanceof ReadabilityPanelView) {
         if (this.multiReport !== null) {
           leaf.view.renderMulti(this.multiReport);
         } else {
-          leaf.view.render(report, fileName, target);
+          leaf.view.render(report, fileName, target, structure);
         }
       }
     }
+  }
+  /** The raw `diataxis:` front-matter value, for the structure conformance hint. */
+  declaredDiataxis(file) {
+    var _a;
+    if (file === null) return null;
+    const frontmatter = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    const value = frontmatter == null ? void 0 : frontmatter["diataxis"];
+    return typeof value === "string" ? value : null;
+  }
+  /** Experimental structure/cohesion hints for the single active note (opt-in). */
+  structureFor(view, report) {
+    if (!this.settings.showStructureHints || view === null || report === null) {
+      return null;
+    }
+    return analyzeStructure(view.editor.getValue(), {
+      language: report.language,
+      declaredDiataxis: this.declaredDiataxis(view.file)
+    });
   }
   // --- Multi-note scoring (BC_E1_S10) ---------------------------------------
   /** Markdown files in the selection, folders expanded recursively. */

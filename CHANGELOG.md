@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0]
+
+**Experimental: structure & cohesion hints (off by default).** LIX and Flesch only read
+word- and sentence-level surface features; the comprehension research shows that a text's
+*organization and cohesion* are a separate axis the formulas miss. A new opt-in panel section
+(Settings → *Show structure & cohesion hints*) surfaces cheap, local proxies for that axis:
+heading structure, adjacent-sentence content-word overlap (a cohesion proxy), connective
+density (English/Dutch for now), and — when a note declares a `diataxis:` type — a structural
+match hint. These are **descriptive hints, deliberately kept out of the LIX score and never
+pass/fail**, because the right amount of cohesion depends on the audience.
+
 ## [0.7.0]
 
 **Russian, Turkish and Czech are now supported.** The secondary Flesch score covers three
