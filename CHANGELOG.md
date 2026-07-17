@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2]
+
+**Release provenance fix (no functional changes).** The build-provenance attestation on the
+release assets is now signed from the release **tag** instead of a build branch, so it
+verifies against this repository — clearing the community-directory warning that the assets
+"failed cryptographic verification." The plugin itself is unchanged from 0.8.1.
+
 ## [0.8.1]
 
 **The structure & cohesion hints now open with a conclusion, not just numbers.** The

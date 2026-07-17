@@ -1,15 +1,16 @@
 name: Release Obsidian Plugin
 
 on:
+  # Tag-triggered so the build-provenance attestation is signed from the release
+  # TAG (refs/tags/x.y.z). Obsidian's directory binds the attestation's source to
+  # the release tag; a branch ref (the old release/x.y.z trigger) fails that
+  # verification, so we no longer trigger on a branch. codebase-basecamp pushes
+  # the tag directly (BC_E1_S25).
   push:
     tags:
       - "*"
-    # Pushing a release/x.y.z branch also cuts release x.y.z: the workflow
-    # derives the version from the branch name and creates the tag itself,
-    # for environments that cannot push tags directly.
-    branches:
-      - "release/*"
-  # Same fallback, but triggered by hand from the Actions tab.
+  # Manual fallback from the Actions tab (note: runs on the dispatched ref, so
+  # dispatch from the tag if you need matching provenance).
   workflow_dispatch:
     inputs:
       version:
