@@ -26,6 +26,17 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Build the plugin from this repo's source
+        # main.js is NOT committed; it is built here so the build-provenance
+        # attestation genuinely proves the release asset was built from this
+        # repository's source (the Obsidian directory verifies exactly this).
+        run: |
+          npm ci
+          npm run build
       - name: Determine version
         # Tag push: the tag is the bare version. release/* push or manual
         # dispatch: strip the branch prefix / take the input.

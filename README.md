@@ -126,7 +126,8 @@ Readability Compass is free and GPL-3.0. If it keeps your writing on target, you
 
 Issues and ideas: [GitHub issues](../../issues). Development happens in the
 [codebase-basecamp](https://github.com/maxonamission/codebase-basecamp) repo; this repo
-carries releases.
+mirrors the source and builds each release here, so every release asset carries a
+build-provenance attestation you can verify.
 
 ## License
 

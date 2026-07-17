@@ -81,6 +81,12 @@
 	margin: var(--size-4-2) 0 var(--size-2-2) 0;
 }
 
+.rc-structure-read {
+	margin-bottom: var(--size-2-3);
+	font-style: italic;
+	color: var(--text-normal);
+}
+
 .rc-sentences {
 	padding-inline-start: var(--size-4-4);
 	margin: 0;

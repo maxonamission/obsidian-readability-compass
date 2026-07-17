@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.1]
+
+**The structure & cohesion hints now open with a conclusion, not just numbers.** The
+experimental panel section led with raw figures; it now starts with a one-line **structural
+read** that synthesizes them into a plain characterization — e.g. *"Flowing prose — loosely
+connected (topics shift between sentences); 5 long sections without subheadings; a heading
+level is skipped."* When a note declares a `diataxis:` type, the conclusion leads with whether
+the structure matches that type. Still descriptive, still never pass/fail.
+
 ## [0.8.0]
 
 **Experimental: structure & cohesion hints (off by default).** LIX and Flesch only read

@@ -1,0 +1,36 @@
+{
+	"name": "obsidian-readability-compass",
+	"version": "0.8.1",
+	"description": "Readability Compass for Obsidian — know the reading level of your notes: language-independent LIX score with CEFR-style target bands, always-on status bar indicators, a detail panel and commands.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "eslint src/"
+	},
+	"keywords": [
+		"obsidian",
+		"readability",
+		"lix",
+		"flesch",
+		"writing"
+	],
+	"license": "GPL-3.0",
+	"devDependencies": {
+		"@codemirror/state": "6.5.0",
+		"@codemirror/view": "6.38.6",
+		"@types/node": "^26.1.1",
+		"@typescript-eslint/parser": "^8.63.0",
+		"builtin-modules": "^5.3.0",
+		"esbuild": "^0.28.1",
+		"eslint": "^10.6.0",
+		"eslint-plugin-obsidianmd": "^0.4.1",
+		"obsidian": "~1.13.1",
+		"tslib": "2.8.1",
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.63.0",
+		"vitest": "^4.1.10"
+	}
+}
