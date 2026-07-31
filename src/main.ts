@@ -17,6 +17,11 @@ import { analyzeStructure, StructureReport } from "./readability/structure";
 import { CombinedScore, combineCounts } from "./readability/aggregate";
 import { SentenceSpan } from "./readability/sentences";
 import { NoteContext, ResolvedTarget, resolveTarget } from "./readability/target-profile";
+import {
+	applyReadabilityProperties,
+	isValidPropertyPrefix,
+	propertyKeys,
+} from "./bases-properties";
 import { longSentenceExtension } from "./editor-highlight";
 import {
 	formatCalloutReport,
@@ -146,6 +151,30 @@ export default class ReadabilityCompassPlugin extends Plugin {
 		// updates shortly after the editor, so refresh again when it lands.
 		this.registerEvent(this.app.metadataCache.on("changed", refreshSoon));
 		this.registerDomEvent(document, "selectionchange", refreshStatusSoon);
+
+		// Bases properties auto-update (BC_E2_S4): only notes that already
+		// carry the lix property opt in — new notes join via the command. The
+		// diff guard in updateReadabilityProperties stops the loop a write
+		// would otherwise trigger through this same event.
+		const pendingProperties = new Set<TFile>();
+		const flushProperties = debounce(
+			() => {
+				const files = [...pendingProperties];
+				pendingProperties.clear();
+				for (const file of files) void this.updateReadabilityProperties(file);
+			},
+			3000,
+			true,
+		);
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (file, _data, cache) => {
+				if (!this.settings.basesWriteEnabled || !this.settings.basesAutoUpdate) return;
+				const keys = propertyKeys(this.settings.basesPropertyPrefix.trim());
+				if (cache.frontmatter?.[keys.lix] === undefined) return;
+				pendingProperties.add(file);
+				flushProperties();
+			}),
+		);
 
 		this.app.workspace.onLayoutReady(() => this.refreshUi());
 	}
@@ -473,6 +502,44 @@ export default class ReadabilityCompassPlugin extends Plugin {
 		}
 	}
 
+	// --- Bases properties (BC_E2_S4) -----------------------------------------
+
+	/**
+	 * Write the note's readability into its front matter (route b of the
+	 * BC_E2_S3 spike). Diff-guarded via the metadata cache: the file is only
+	 * touched when a value actually changes, so repeated runs are no-ops and
+	 * a write never re-triggers itself through the metadata-changed event.
+	 */
+	private async updateReadabilityProperties(file: TFile): Promise<boolean> {
+		const prefix = this.settings.basesPropertyPrefix.trim();
+		if (!isValidPropertyPrefix(prefix)) return false;
+		const content = await this.readFileText(file);
+		const target = this.resolveTargetFor(file);
+		const report = analyzeMarkdown(content, this.analyzeOptions(target, file));
+		const cached: Record<string, unknown> = {
+			...(this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}),
+		};
+		if (!applyReadabilityProperties(cached, report, prefix)) return false;
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(frontmatter: Record<string, unknown>) => {
+				applyReadabilityProperties(frontmatter, report, prefix);
+			},
+		);
+		return true;
+	}
+
+	private async updateAllReadabilityProperties(): Promise<void> {
+		const files = this.app.vault.getMarkdownFiles();
+		let updated = 0;
+		for (const file of files) {
+			if (await this.updateReadabilityProperties(file)) updated++;
+		}
+		new Notice(
+			`Readability properties: ${updated} of ${files.length} notes updated.`,
+		);
+	}
+
 	/** An open note's live editor buffer (ahead of disk while editing); else the vault copy. */
 	private async readFileText(file: TFile): Promise<string> {
 		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
@@ -670,6 +737,35 @@ export default class ReadabilityCompassPlugin extends Plugin {
 	// --- Commands -----------------------------------------------------------
 
 	private addCommands(): void {
+		this.addCommand({
+			id: "update-readability-properties",
+			name: "Update readability properties of current note",
+			checkCallback: (checking: boolean) => {
+				const file = this.activeMarkdownView()?.file ?? null;
+				if (!this.settings.basesWriteEnabled || file === null) return false;
+				if (!checking) {
+					void this.updateReadabilityProperties(file).then((changed) => {
+						new Notice(
+							changed
+								? "Readability properties updated."
+								: "Readability properties already up to date.",
+						);
+					});
+				}
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "update-readability-properties-vault",
+			name: "Update readability properties of all notes",
+			checkCallback: (checking: boolean) => {
+				if (!this.settings.basesWriteEnabled) return false;
+				if (!checking) void this.updateAllReadabilityProperties();
+				return true;
+			},
+		});
+
 		this.addCommand({
 			id: "open-panel",
 			name: "Open readability panel",

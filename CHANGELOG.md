@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0]
+
+**Per-section scores, Bases integration, and Obsidian 1.13 as the new baseline.**
+
+- **Per-section scores.** Long note? The panel now shows a **Sections** list: every heading
+  section with its own LIX and target check, so you can see *which part* is off target —
+  click a section to jump to its heading. Text before the first heading shows as *(intro)*;
+  sections below the minimum word count show no score instead of a misleading one. On by
+  default; toggle it under Settings → *Show per-section scores in the panel*.
+- **Bases integration (opt-in, off by default).** Enable *Write readability properties* and
+  the new commands write `readability-lix`, `readability-band` and `readability-on-target`
+  into a note's properties — build [Bases](https://help.obsidian.md/bases) views and filters
+  over your vault's readability, like "every note above its target band". Works per note or
+  vault-wide; an optional auto-update keeps the properties fresh for notes that carry them.
+  The plugin never writes to your notes unless you turn this on, and notes too short to
+  score have their readability properties removed rather than left stale.
+- **Obsidian 1.13 required.** The temporary pre-1.13 settings fallback from 0.8.4 is gone
+  now that Obsidian 1.13 is publicly released; `minAppVersion` is 1.13.0. Existing installs
+  on older Obsidian versions keep working on 0.8.4 and pick up 0.9.0 after updating Obsidian.
+- The plugin description and README now say what was always true: ten languages ship with
+  their own native readability formula on top of the language-independent LIX.
+
 ## [0.8.4]
 
 **The settings are now searchable on Obsidian 1.13+.** The settings tab adopted Obsidian's

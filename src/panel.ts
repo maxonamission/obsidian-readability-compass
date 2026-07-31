@@ -160,6 +160,7 @@ export class ReadabilityPanelView extends ItemView {
 		row("Paragraphs", String(report.paragraphs));
 		row("Reading time", formatReadingTime(report.readingMinutes));
 
+		this.renderSections(root, report);
 		this.renderParagraphs(root, report.topParagraphs);
 		this.renderSentenceList(
 			root,
@@ -278,6 +279,40 @@ export class ReadabilityPanelView extends ItemView {
 			text: "Combined over the selected notes; per-note targets apply to the marks.",
 			cls: "rc-footnote",
 		});
+	}
+
+	// --- Per-section scores (BC_E2_S2) -----------------------------------------
+
+	/**
+	 * One row per heading section, in document order, with the section's own
+	 * LIX and target check. Only shown when the note actually has sections to
+	 * compare (≥ 2) — a single-section note is just the note-level score again.
+	 */
+	private renderSections(root: HTMLElement, report: ReadabilityReport): void {
+		if (!this.plugin.settings.showSectionScores) return;
+		if (report.sections.length < 2) return;
+		root.createDiv({ text: "Sections", cls: "rc-section-title" });
+		const list = root.createDiv({ cls: "rc-multi-files" });
+		for (const section of report.sections) {
+			const item = list.createDiv({ cls: "rc-count-row rc-multi-file" });
+			item.createSpan({
+				text: section.level === 0 ? "(intro)" : section.heading,
+				cls: "rc-count-label",
+			});
+			const mark =
+				section.onTarget === null ? "" : section.onTarget ? " ✓" : " ▲";
+			item.createSpan({
+				text:
+					section.lix === null
+						? `${section.words} w · too short to score`
+						: `${section.words} w · LIX ${formatLixValue(section.lix)}${mark}`,
+				cls: "rc-count-value",
+			});
+			item.setAttribute("title", "Click to jump to this section");
+			this.registerDomEvent(item, "click", () => {
+				void this.plugin.jumpToSpan(section);
+			});
+		}
 	}
 
 	// --- Structure & cohesion (experimental, BC_E1_S23) ------------------------

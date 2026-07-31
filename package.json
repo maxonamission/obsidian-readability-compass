@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-readability-compass",
-	"version": "0.8.4",
+	"version": "0.9.0",
 	"description": "Readability Compass for Obsidian — know the reading level of your notes: language-independent LIX score with CEFR-style target bands, always-on status bar indicators, a detail panel and commands.",
 	"main": "main.js",
 	"scripts": {
@@ -31,5 +31,8 @@
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.63.0",
 		"vitest": "^4.1.10"
+	},
+	"overrides": {
+		"brace-expansion": "^5.0.9"
 	}
 }

@@ -49,6 +49,21 @@ export interface ParagraphSpan {
 	lix: number;
 }
 
+export interface SectionScore {
+	/** Heading text (from the original markdown, without the #-markers). */
+	heading: string;
+	/** 1–6; the preamble before the first heading is level 0 with an empty heading. */
+	level: number;
+	/** Document offsets of the heading line — the jump target. The preamble points at the note start. */
+	start: number;
+	end: number;
+	words: number;
+	/** null below the note's minWords threshold (too erratic — same guard as the note score). */
+	lix: number | null;
+	/** null when lix is null; otherwise lix <= targetMaxLix. */
+	onTarget: boolean | null;
+}
+
 export interface ReadabilityReport {
 	words: number;
 	sentences: number;
@@ -66,6 +81,11 @@ export interface ReadabilityReport {
 	/** null when the language is unknown or the text is too short. */
 	flesch: FleschResult | null;
 	readingMinutes: number;
+	/**
+	 * Per-heading-section scores, in document order (BC_E2_S2). Empty when the
+	 * note has no headings — the note-level score already covers it.
+	 */
+	sections: SectionScore[];
 	/** Longest sentences first; offsets are valid in the original document. */
 	topSentences: SentenceSpan[];
 	/** Highest-LIX paragraphs first (only paragraphs of ≥ 20 words). */
@@ -151,6 +171,97 @@ function topParagraphs(clean: string, original: string, count: number): Paragrap
 	return spans.sort((a, b) => b.lix - a.lix).slice(0, count);
 }
 
+const HEADING_LINE_RE = /^(#{1,6})\s+(.+?)\s*$/;
+
+/**
+ * Per-heading-section scores (BC_E2_S2): a heading starts a section that runs
+ * until the next heading. Text before the first heading becomes a level-0
+ * preamble entry (only when it contains words). Headings are detected on the
+ * original markdown; the aligned `clean` line must still carry text, which
+ * excludes look-alikes inside stripped regions (code fences).
+ */
+function sectionScores(
+	clean: string,
+	original: string,
+	options: AnalyzeOptions,
+): SectionScore[] {
+	interface Boundary {
+		heading: string;
+		level: number;
+		start: number;
+		end: number;
+		contentStart: number;
+	}
+	const boundaries: Boundary[] = [];
+	const cleanLines = clean.split("\n");
+	const sourceLines = original.split("\n");
+	let offset = 0;
+	for (let index = 0; index < sourceLines.length; index++) {
+		const match = HEADING_LINE_RE.exec(sourceLines[index]);
+		const lineLength = sourceLines[index].length;
+		if (match !== null && /\S/.test(cleanLines[index] ?? "")) {
+			boundaries.push({
+				heading: match[2],
+				level: match[1].length,
+				start: offset,
+				end: offset + lineLength,
+				contentStart: offset + lineLength + 1,
+			});
+		}
+		offset += lineLength + 1;
+	}
+	if (boundaries.length === 0) return [];
+
+	const scored = (
+		heading: string,
+		level: number,
+		start: number,
+		end: number,
+		contentStart: number,
+		contentEnd: number,
+	): SectionScore => {
+		const text = clean.slice(contentStart, contentEnd);
+		const words = extractWords(text);
+		const lix =
+			words.length >= options.minWords
+				? lixScore(
+						words.length,
+						splitSentences(text).length,
+						words.filter(isLongWord).length,
+					)
+				: null;
+		return {
+			heading,
+			level,
+			start,
+			end,
+			words: words.length,
+			lix,
+			onTarget: lix === null ? null : lix <= options.targetMaxLix,
+		};
+	};
+
+	const sections: SectionScore[] = [];
+	const preamble = scored("", 0, 0, 0, 0, boundaries[0].start);
+	if (preamble.words > 0) sections.push(preamble);
+	for (let index = 0; index < boundaries.length; index++) {
+		const boundary = boundaries[index];
+		const contentEnd =
+			index + 1 < boundaries.length ? boundaries[index + 1].start : clean.length;
+		sections.push(
+			scored(
+				boundary.heading,
+				boundary.level,
+				boundary.start,
+				boundary.end,
+				boundary.contentStart,
+				contentEnd,
+			),
+		);
+	}
+	return sections;
+}
+
 export function analyzeMarkdown(
 	markdown: string,
 	options: AnalyzeOptions,
@@ -210,6 +321,7 @@ export function analyzeMarkdown(
 		cefr: lix === null ? null : cefrIndication(lix),
 		flesch,
 		readingMinutes: wordCount / Math.max(1, options.wordsPerMinute),
+		sections: sectionScores(clean, markdown, options),
 		topSentences,
 		topParagraphs: topParagraphs(clean, markdown, topCount),
 		onTarget: lix === null ? null : lix <= options.targetMaxLix,
