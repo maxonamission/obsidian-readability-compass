@@ -22,7 +22,9 @@ That's the whole entry fee. No account, no API key, nothing leaves your machine.
   segments. Select text and it scores the selection. Click it to open the panel.
 - **Side panel — the why behind the verdict**: a score card (LIX, band, indicative CEFR
   audience, target check), the published Flesch variant for your language (ten supported),
-  counts (words, sentences, words per sentence, long words, paragraphs, reading time), your
+  counts (words, sentences, words per sentence, long words, paragraphs, reading time),
+  **per-section scores** (every heading section with its own LIX and target check, so you
+  see which part of a long note drifts off target — click to jump to the heading), your
   **hardest paragraphs** (by LIX) and your **longest sentences** — click one and you jump
   straight to the culprit. You choose how many entries the lists show, reveal more with
   *Show more*, and can hide sentences below a word threshold.
@@ -31,8 +33,23 @@ That's the whole entry fee. No account, no API key, nothing leaves your machine.
   menu for folders and larger sets). One combined score, a per-note list sorted hardest-first
   (each note against its own target), and the longest sentences across all of them — click to
   open that note at that sentence.
-- **Five commands** — open the panel · score the current note · score the selection · insert
-  a readability report at the cursor (as a callout) · toggle the status bar.
+- **Structure & cohesion hints (experimental, opt-in, off by default)** — readability
+  formulas only read surface features; a text's organization is a separate axis they miss.
+  This panel section opens with a one-line **structural read** ("Flowing prose — loosely
+  connected; 5 long sections without subheadings") over descriptive signals: heading
+  structure, sentence-to-sentence overlap, connective density (in all ten register
+  languages) and — when a note declares a `diataxis:` type — whether the structure matches
+  it. Hints, not a score: never pass/fail, because the right amount of cohesion depends on
+  your audience.
+- **Bases integration (opt-in, off by default)** — write the score into note properties
+  (`readability-lix`, `readability-band`, `readability-on-target`) and build
+  [Bases](https://help.obsidian.md/bases) views and filters over your vault's readability —
+  for example, every note above its target band. Still a verdict, not a statistics
+  dashboard: notes too short to score carry no properties at all, and the plugin never
+  writes to your notes unless you turn this on.
+- **Commands** — open the panel · score the current note · score the selection · insert
+  a readability report at the cursor (as a callout) · toggle the status bar · update the
+  readability properties of the current note or the whole vault (with the opt-in above).
 
 ## What Readability Compass is *not*
 

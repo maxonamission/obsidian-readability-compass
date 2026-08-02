@@ -65,11 +65,16 @@ describe("analyzeStructure — connectives", () => {
 		expect(s.connectives as number).toBeCloseTo(2 / 3, 2);
 	});
 
-	it("is null when the language has no connective list", () => {
-		const s = analyzeStructure("Palabras claras ayudan mucho al lector.", {
+	it("covers every register language since BC_E1_S23 (es: 0 without, hit with connective)", () => {
+		const without = analyzeStructure("Palabras claras ayudan mucho al lector.", {
 			language: "es",
 		});
-		expect(s.connectives).toBeNull();
+		expect(without.connectives).toBe(0);
+		const withConnective = analyzeStructure(
+			"Palabras claras ayudan mucho al lector. Además, las frases cortas ayudan también.",
+			{ language: "es" },
+		);
+		expect(withConnective.connectives as number).toBeCloseTo(1 / 2, 2);
 	});
 
 	it("is null when the language is unknown", () => {

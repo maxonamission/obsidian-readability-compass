@@ -140,6 +140,13 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		countSyllables: makeVowelGroupCounter({ vowels: "aeiouyäöü" }),
 		// Amstad (1978), the German adaptation of Flesch Reading Ease.
 		flesch: { name: "Flesch-Amstad", base: 180, perWps: 1, perSpw: 58.5 },
+		connectives: new Set([
+			"jedoch", "allerdings", "deshalb", "deswegen", "daher", "darum",
+			"weil", "obwohl", "obgleich", "außerdem", "zudem", "dennoch",
+			"trotzdem", "während", "nämlich", "folglich", "somit", "dadurch",
+			"sodass", "beispielsweise", "zunächst", "anschließend", "schließlich",
+			"einerseits", "andererseits", "hingegen", "gleichwohl",
+		]),
 	},
 	{
 		code: "es",
@@ -155,6 +162,14 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		}),
 		// Fernández-Huerta (1959), the Spanish adaptation of Flesch Reading Ease.
 		flesch: { name: "Fernández-Huerta", base: 206.84, perWps: 1.02, perSpw: 60 },
+		connectives: new Set([
+			"porque", "aunque", "además", "asimismo", "igualmente", "entonces",
+			"luego", "mientras", "pues", "así", "incluso", "sino", "también",
+			"tampoco", "finalmente", "posteriormente", "previamente",
+			"específicamente", "efectivamente", "inicialmente",
+			"consecuentemente", "respectivamente", "adicionalmente",
+			"concretamente",
+		]),
 	},
 	{
 		code: "fr",
@@ -171,6 +186,13 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		}),
 		// Kandel & Moles (1958), the French adaptation of Flesch Reading Ease.
 		flesch: { name: "Kandel-Moles", base: 209, perWps: 1.15, perSpw: 68 },
+		connectives: new Set([
+			"cependant", "toutefois", "néanmoins", "pourtant", "donc", "ainsi",
+			"alors", "ensuite", "puis", "enfin", "car", "puisque", "lorsque",
+			"quoique", "également", "notamment", "effectivement", "finalement",
+			"précisément", "inversement", "parallèlement", "bref",
+			"premièrement", "deuxièmement",
+		]),
 	},
 	{
 		code: "pt",
@@ -186,6 +208,13 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		}),
 		// Martins et al. (1996), the Portuguese adaptation of Flesch Reading Ease.
 		flesch: { name: "Flesch-Martins", base: 248.835, perWps: 1.015, perSpw: 84.6 },
+		connectives: new Set([
+			"porque", "embora", "contudo", "todavia", "entretanto", "porém",
+			"portanto", "assim", "então", "logo", "depois", "finalmente",
+			"enquanto", "pois", "aliás", "ademais", "igualmente", "também",
+			"inclusive", "consequentemente", "posteriormente", "anteriormente",
+			"especificamente", "efetivamente",
+		]),
 	},
 	{
 		code: "it",
@@ -201,6 +230,13 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		// Franchina & Vacca (1972), the Italian adaptation of Flesch Reading
 		// Ease (F = 206 − 0.65·syllables-per-100-words − words-per-sentence).
 		flesch: { name: "Flesch-Vacca", base: 206, perWps: 1, perSpw: 65 },
+		connectives: new Set([
+			"però", "tuttavia", "comunque", "quindi", "dunque", "perciò",
+			"pertanto", "infatti", "inoltre", "invece", "mentre", "poiché",
+			"perché", "sebbene", "benché", "nonostante", "ossia", "cioè",
+			"infine", "successivamente", "precedentemente", "effettivamente",
+			"altresì", "peraltro", "ugualmente",
+		]),
 	},
 	{
 		code: "ru",
@@ -219,6 +255,13 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		}),
 		// Oborneva (2006), the Russian adaptation of Flesch Reading Ease.
 		flesch: { name: "Flesch-Oborneva", base: 206.835, perWps: 1.52, perSpw: 65.14 },
+		connectives: new Set([
+			"однако", "поэтому", "потому", "поскольку", "хотя", "впрочем",
+			"зато", "причём", "причем", "также", "тоже", "затем", "потом",
+			"наконец", "например", "следовательно", "итак", "далее",
+			"впоследствии", "соответственно", "наоборот", "вдобавок", "притом",
+			"ибо",
+		]),
 	},
 	{
 		code: "tr",
@@ -239,6 +282,12 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		// coefficients weight words-per-sentence and syllables-per-word
 		// differently from English, kept in their published slots.
 		flesch: { name: "Ateşman", base: 198.825, perWps: 2.61, perSpw: 40.175 },
+		connectives: new Set([
+			"ancak", "fakat", "çünkü", "ayrıca", "dolayısıyla", "böylece",
+			"üstelik", "oysa", "halbuki", "örneğin", "yani", "zira", "dahası",
+			"ardından", "sonuçta", "nihayet", "hatta", "nitekim", "keza",
+			"öncelikle", "sonrasında", "böylelikle", "öyleyse",
+		]),
 	},
 	{
 		code: "cs",
@@ -262,6 +311,13 @@ export const LANGUAGES: readonly LanguageDefinition[] = [
 		// while the two coefficients were fitted (the paper misprints it as
 		// 206.935); the genuinely-Czech numbers are perWps 1.672, perSpw 62.18.
 		flesch: { name: "Flesch-Bendová", base: 206.835, perWps: 1.672, perSpw: 62.18 },
+		connectives: new Set([
+			"však", "avšak", "ovšem", "přesto", "proto", "tedy", "tudíž",
+			"protože", "jelikož", "ačkoli", "ačkoliv", "třebaže", "zatímco",
+			"navíc", "dále", "rovněž", "také", "totiž", "například", "následně",
+			"nakonec", "naopak", "ostatně", "přitom", "nicméně", "respektive",
+			"konkrétně",
+		]),
 	},
 ];
 

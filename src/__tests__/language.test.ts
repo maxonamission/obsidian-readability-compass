@@ -169,3 +169,21 @@ describe("syllable heuristics for the added languages", () => {
 		expect(syllables("cs", "vlk")).toBe(1);
 	});
 });
+
+describe("connectives register (BC_E1_S23)", () => {
+	it("every register language carries a usable connective list", () => {
+		for (const language of LANGUAGES) {
+			expect(language.connectives, language.code).toBeDefined();
+			expect(language.connectives!.size, language.code).toBeGreaterThanOrEqual(20);
+		}
+	});
+
+	it("connectives are lowercase single tokens (the matcher lowercases words)", () => {
+		for (const language of LANGUAGES) {
+			for (const word of language.connectives!) {
+				expect(word, `${language.code}: "${word}"`).toBe(word.toLowerCase());
+				expect(/\s/.test(word), `${language.code}: "${word}"`).toBe(false);
+			}
+		}
+	});
+});

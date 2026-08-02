@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.1]
+
+**The cohesion signal now speaks all ten languages — and the README caught up.**
+
+- The experimental structure & cohesion hints measured **connective density** in English
+  and Dutch only; the closed connective lists now cover **all ten register languages**
+  (German, Spanish, French, Portuguese, Italian, Russian, Turkish and Czech added). The
+  cohesion signal works wherever your Flesch variant does.
+- The README now actually tells you about the structure & cohesion hints, the per-section
+  scores and the Bases integration — and the plugin description opens with the question
+  that matters: will your readers keep up?
+- No other behavior changes.
+
 ## [0.9.0]
 
 **Per-section scores, Bases integration, and Obsidian 1.13 as the new baseline.**
