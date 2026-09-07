@@ -1,7 +1,7 @@
 {
 	"id": "readability-compass",
 	"name": "Readability Compass",
-	"version": "0.9.1",
+	"version": "0.10.0",
 	"minAppVersion": "1.13.0",
 	"description": "Will your readers keep up? Pick a target level (≈ CEFR B1/B2/C1); the status bar shows on or off target while you write — in any language (LIX). The panel shows why, per section, click to jump.",
 	"author": "Max Kloosterman",

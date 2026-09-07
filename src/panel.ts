@@ -1,6 +1,6 @@
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import { ParagraphSpan, ReadabilityReport } from "./readability/analyze";
-import { DiataxisCluster, StructureReport } from "./readability/structure";
+import { StructureReport } from "./readability/structure";
 import { SentenceSpan } from "./readability/sentences";
 import { ResolvedTarget } from "./readability/target-profile";
 import {
@@ -10,7 +10,9 @@ import {
 	formatTargetBand,
 	formatTargetSource,
 } from "./format";
-import { LANGUAGES } from "./readability/language";
+import { DetectedLanguage, LANGUAGES } from "./readability/language";
+import { structureConclusionModel } from "./readability/structure";
+import { Strings } from "./i18n";
 import type ReadabilityCompassPlugin from "./main";
 import type { MultiFileReport } from "./main";
 
@@ -27,9 +29,8 @@ interface SentenceListEntry {
 	onSelect: () => void;
 }
 
-const LANGUAGE_LABEL: Record<string, string> = {
-	unknown: "language unknown — LIX only",
-};
+/** Language names stay in their English registry form ("Dutch", "German"). */
+const LANGUAGE_LABEL: Record<string, string> = {};
 for (const language of LANGUAGES) {
 	LANGUAGE_LABEL[language.code] = language.label;
 }
@@ -71,6 +72,15 @@ export class ReadabilityPanelView extends ItemView {
 		return this.plugin.settings.topSentencesShown + this.extraEntries;
 	}
 
+	/**
+	 * The feedback language for what is on screen (BC_E1_S28). `detected` is
+	 * null for an explorer selection: several notes can speak several
+	 * languages, so that case resolves to English unless the user pinned one.
+	 */
+	private strings(detected: DetectedLanguage | null): Strings {
+		return this.plugin.strings(detected);
+	}
+
 	private resetForSubject(subject: string): void {
 		if (this.renderedSubject !== subject) {
 			this.renderedSubject = subject;
@@ -94,11 +104,10 @@ export class ReadabilityPanelView extends ItemView {
 		root.empty();
 		root.addClass("rc-panel");
 
+		const t = this.strings(report?.language ?? null);
+
 		if (report === null || fileName === null) {
-			root.createEl("p", {
-				text: "No active note. Open a Markdown note to see its readability.",
-				cls: "rc-empty",
-			});
+			root.createEl("p", { text: t.panelEmpty, cls: "rc-empty" });
 			return;
 		}
 
@@ -109,27 +118,27 @@ export class ReadabilityPanelView extends ItemView {
 		if (report.lix === null) {
 			card.createDiv({ text: "–", cls: "rc-score" });
 			card.createDiv({
-				text: `Add more text for a stable score (min ${report.minWords} words; found ${report.words}).`,
+				text: t.tooShortForScore(report.minWords, report.words),
 				cls: "rc-hint",
 			});
 		} else {
 			card.createDiv({ text: formatLixValue(report.lix), cls: "rc-score" });
-			card.createDiv({ text: "LIX", cls: "rc-score-label" });
+			card.createDiv({ text: t.scoreLabelLix, cls: "rc-score-label" });
 			card.createDiv({
-				text: `${report.band ?? ""} · ${report.cefr ?? ""}`,
+				text: `${report.band === null ? "" : t.lixBand[report.band]} · ${report.cefr ?? ""}`,
 				cls: "rc-band",
 			});
 			const onTarget = report.onTarget === true;
 			card.createDiv({
 				text: onTarget
-					? `✓ on target (max ${report.targetMaxLix})`
-					: `▲ above target (max ${report.targetMaxLix})`,
+					? t.onTarget(report.targetMaxLix)
+					: t.aboveTarget(report.targetMaxLix),
 				cls: onTarget ? "rc-target rc-target-ok" : "rc-target rc-target-off",
 			});
 		}
 		if (target !== null) {
 			card.createDiv({
-				text: `Target ${formatTargetBand(target)} · from ${formatTargetSource(target)}`,
+				text: t.targetLine(formatTargetBand(target), formatTargetSource(target, t)),
 				cls: "rc-target-source",
 			});
 		}
@@ -138,12 +147,16 @@ export class ReadabilityPanelView extends ItemView {
 		const secondary = root.createDiv({ cls: "rc-secondary" });
 		if (report.flesch !== null) {
 			secondary.createSpan({
-				text: `${report.flesch.name} ${Math.round(report.flesch.score)} (${report.flesch.label})`,
+				text: t.fleschLine(
+					report.flesch.name,
+					Math.round(report.flesch.score),
+					t.fleschLabel[report.flesch.label],
+				),
 			});
 			secondary.createSpan({ text: " · " });
 		}
 		secondary.createSpan({
-			text: LANGUAGE_LABEL[report.language] ?? report.language,
+			text: LANGUAGE_LABEL[report.language] ?? t.languageUnknown,
 		});
 
 		// Counts
@@ -153,15 +166,18 @@ export class ReadabilityPanelView extends ItemView {
 			el.createSpan({ text: label, cls: "rc-count-label" });
 			el.createSpan({ text: value, cls: "rc-count-value" });
 		};
-		row("Words", String(report.words));
-		row("Sentences", String(report.sentences));
-		row("Words per sentence", report.avgWordsPerSentence.toFixed(1));
-		row("Long words (>6 letters)", `${report.longWords} (${formatPercent(report.longWordRatio)})`);
-		row("Paragraphs", String(report.paragraphs));
-		row("Reading time", formatReadingTime(report.readingMinutes));
+		row(t.countWords, String(report.words));
+		row(t.countSentences, String(report.sentences));
+		row(t.countWordsPerSentence, report.avgWordsPerSentence.toFixed(1));
+		row(
+			t.countLongWords,
+			`${report.longWords} (${formatPercent(report.longWordRatio)})`,
+		);
+		row(t.countParagraphs, String(report.paragraphs));
+		row(t.countReadingTime, formatReadingTime(report.readingMinutes));
 
-		this.renderSections(root, report);
-		this.renderParagraphs(root, report.topParagraphs);
+		this.renderSections(root, report, t);
+		this.renderParagraphs(root, report.topParagraphs, t);
 		this.renderSentenceList(
 			root,
 			report.topSentences.map((span) => ({
@@ -169,14 +185,13 @@ export class ReadabilityPanelView extends ItemView {
 				label: null,
 				onSelect: () => void this.plugin.jumpToSpan(span),
 			})),
+			t,
 		);
 
-		if (structure !== null) this.renderStructure(root, structure);
+		if (structure !== null) this.renderStructure(root, structure, t);
 
 		root.createEl("p", {
-			text: report.tablesIncluded
-				? "Measured on running text incl. tables — front matter, code, links and URLs are excluded."
-				: "Measured on running text — front matter, code, tables, links and URLs are excluded.",
+			text: t.footnoteMeasured(report.tablesIncluded),
 			cls: "rc-footnote",
 		});
 	}
@@ -196,10 +211,13 @@ export class ReadabilityPanelView extends ItemView {
 		root.empty();
 		root.addClass("rc-panel");
 
+		// A selection can mix languages, so there is no single note to follow.
+		const t = this.strings(null);
+
 		const header = root.createDiv({ cls: "rc-file rc-multi-header" });
-		header.createSpan({ text: `${multi.combined.files} notes` });
+		header.createSpan({ text: t.notesSelected(multi.combined.files) });
 		const back = header.createEl("button", {
-			text: "Back to current note",
+			text: t.backToCurrentNote,
 			cls: "rc-back-button",
 		});
 		this.registerDomEvent(back, "click", () => this.plugin.clearMultiReport());
@@ -208,30 +226,22 @@ export class ReadabilityPanelView extends ItemView {
 		const card = root.createDiv({ cls: "rc-card" });
 		if (combined.lix === null) {
 			card.createDiv({ text: "–", cls: "rc-score" });
-			card.createDiv({
-				text: "Too little text in this selection for a stable score.",
-				cls: "rc-hint",
-			});
+			card.createDiv({ text: t.selectionTooShort, cls: "rc-hint" });
 		} else {
 			card.createDiv({ text: formatLixValue(combined.lix), cls: "rc-score" });
-			card.createDiv({ text: "LIX (combined)", cls: "rc-score-label" });
+			card.createDiv({ text: t.scoreLabelLixCombined, cls: "rc-score-label" });
 			card.createDiv({
-				text: `${combined.band ?? ""} · ${combined.cefr ?? ""}`,
+				text: `${combined.band === null ? "" : t.lixBand[combined.band]} · ${combined.cefr ?? ""}`,
 				cls: "rc-band",
 			});
 			if (combined.onTarget !== null && combined.maxLix !== null) {
 				const onTarget = combined.onTarget;
 				card.createDiv({
-					text: onTarget
-						? `✓ on target (max ${combined.maxLix})`
-						: `▲ above target (max ${combined.maxLix})`,
+					text: onTarget ? t.onTarget(combined.maxLix) : t.aboveTarget(combined.maxLix),
 					cls: onTarget ? "rc-target rc-target-ok" : "rc-target rc-target-off",
 				});
 			} else {
-				card.createDiv({
-					text: "Notes have different targets — see the per-note marks below.",
-					cls: "rc-target-source",
-				});
+				card.createDiv({ text: t.mixedTargets, cls: "rc-target-source" });
 			}
 		}
 
@@ -241,12 +251,12 @@ export class ReadabilityPanelView extends ItemView {
 			el.createSpan({ text: label, cls: "rc-count-label" });
 			el.createSpan({ text: value, cls: "rc-count-value" });
 		};
-		row("Words", String(combined.words));
-		row("Sentences", String(combined.sentences));
-		row("Reading time", formatReadingTime(combined.readingMinutes));
+		row(t.countWords, String(combined.words));
+		row(t.countSentences, String(combined.sentences));
+		row(t.countReadingTime, formatReadingTime(combined.readingMinutes));
 
 		// Per-note rows, hardest first.
-		root.createDiv({ text: "Notes (hardest first)", cls: "rc-section-title" });
+		root.createDiv({ text: t.notesHardestFirst, cls: "rc-section-title" });
 		const list = root.createDiv({ cls: "rc-multi-files" });
 		for (const entry of multi.rows) {
 			const item = list.createDiv({ cls: "rc-count-row rc-multi-file" });
@@ -260,7 +270,7 @@ export class ReadabilityPanelView extends ItemView {
 						: `${entry.words} w · LIX ${formatLixValue(entry.lix)}${mark}`,
 				cls: "rc-count-value",
 			});
-			item.setAttribute("title", "Click to open this note");
+			item.setAttribute("title", t.clickToOpenNote);
 			this.registerDomEvent(item, "click", () => {
 				void this.plugin.jumpToFileSpan(entry.file);
 			});
@@ -273,12 +283,10 @@ export class ReadabilityPanelView extends ItemView {
 				label: entry.file.basename,
 				onSelect: () => void this.plugin.jumpToFileSpan(entry.file, entry.span),
 			})),
+			t,
 		);
 
-		root.createEl("p", {
-			text: "Combined over the selected notes; per-note targets apply to the marks.",
-			cls: "rc-footnote",
-		});
+		root.createEl("p", { text: t.footnoteMulti, cls: "rc-footnote" });
 	}
 
 	// --- Per-section scores (BC_E2_S2) -----------------------------------------
@@ -288,27 +296,32 @@ export class ReadabilityPanelView extends ItemView {
 	 * LIX and target check. Only shown when the note actually has sections to
 	 * compare (≥ 2) — a single-section note is just the note-level score again.
 	 */
-	private renderSections(root: HTMLElement, report: ReadabilityReport): void {
+	private renderSections(
+		root: HTMLElement,
+		report: ReadabilityReport,
+		t: Strings,
+	): void {
 		if (!this.plugin.settings.showSectionScores) return;
 		if (report.sections.length < 2) return;
-		root.createDiv({ text: "Sections", cls: "rc-section-title" });
+		root.createDiv({ text: t.sectionsTitle, cls: "rc-section-title" });
 		const list = root.createDiv({ cls: "rc-multi-files" });
 		for (const section of report.sections) {
 			const item = list.createDiv({ cls: "rc-count-row rc-multi-file" });
 			item.createSpan({
-				text: section.level === 0 ? "(intro)" : section.heading,
+				text: section.level === 0 ? t.sectionIntro : section.heading,
 				cls: "rc-count-label",
 			});
 			const mark =
 				section.onTarget === null ? "" : section.onTarget ? " ✓" : " ▲";
 			item.createSpan({
-				text:
-					section.lix === null
-						? `${section.words} w · too short to score`
-						: `${section.words} w · LIX ${formatLixValue(section.lix)}${mark}`,
+				text: t.sectionValue(
+					section.words,
+					section.lix === null ? null : formatLixValue(section.lix),
+					mark,
+				),
 				cls: "rc-count-value",
 			});
-			item.setAttribute("title", "Click to jump to this section");
+			item.setAttribute("title", t.clickToJumpSection);
 			this.registerDomEvent(item, "click", () => {
 				void this.plugin.jumpToSpan(section);
 			});
@@ -322,9 +335,16 @@ export class ReadabilityPanelView extends ItemView {
 	 * verdict and never pass/fail — the "right" amount of cohesion depends on the
 	 * audience, which the plugin cannot measure (see verkenning §6).
 	 */
-	private renderStructure(root: HTMLElement, s: StructureReport): void {
-		root.createDiv({ text: "Structure & cohesion", cls: "rc-section-title" });
-		root.createDiv({ text: structureConclusion(s), cls: "rc-structure-read" });
+	private renderStructure(
+		root: HTMLElement,
+		s: StructureReport,
+		t: Strings,
+	): void {
+		root.createDiv({ text: t.structureTitle, cls: "rc-section-title" });
+		root.createDiv({
+			text: t.structureConclusion(structureConclusionModel(s)),
+			cls: "rc-structure-read",
+		});
 		const box = root.createDiv({ cls: "rc-counts" });
 		const row = (label: string, value: string): void => {
 			const el = box.createDiv({ cls: "rc-count-row" });
@@ -333,63 +353,66 @@ export class ReadabilityPanelView extends ItemView {
 		};
 
 		if (s.cohesion !== null) {
-			const pct = Math.round(s.cohesion * 100);
-			const note = s.cohesion < 0.15 ? " — sentences often shift topic" : "";
-			row("Sentence-to-sentence overlap", `${pct}%${note}`);
+			row(
+				t.cohesionLabel,
+				t.cohesionValue(Math.round(s.cohesion * 100), s.cohesion < 0.15),
+			);
 		}
 		if (s.connectives !== null) {
-			row("Connective density", `${Math.round(s.connectives * 100)}%`);
+			row(t.connectivesLabel, `${Math.round(s.connectives * 100)}%`);
 		}
-		const structureBits = [`${s.headings.count} (depth ${s.headings.maxDepth})`];
-		if (s.headings.skips) structureBits.push("skipped level");
-		row("Headings", structureBits.join(" · "));
+		row(
+			t.headingsLabel,
+			t.headingsValue(s.headings.count, s.headings.maxDepth, s.headings.skips),
+		);
 		if (s.sections.wallOfText > 0) {
 			row(
-				"Long sections (no subheading)",
-				`${s.sections.wallOfText} · up to ${s.sections.longestWords} w`,
+				t.wallOfTextLabel,
+				t.wallOfTextValue(s.sections.wallOfText, s.sections.longestWords),
 			);
 		}
 
 		if (s.diataxis !== null) {
 			const d = s.diataxis;
 			const el = box.createDiv({ cls: "rc-count-row" });
-			el.createSpan({ text: "Diátaxis fit", cls: "rc-count-label" });
+			el.createSpan({ text: t.diataxisLabel, cls: "rc-count-label" });
 			el.createSpan({
 				text: d.matches
-					? `matches '${d.declared}'`
-					: `declared '${d.declared}', reads as ${d.looksLike}`,
+					? t.diataxisMatch(d.declared)
+					: t.diataxisMismatch(d.declared, d.looksLike),
 				cls: d.matches
 					? "rc-count-value rc-target-ok"
 					: "rc-count-value rc-target-off",
 			});
 		}
 
-		root.createEl("p", {
-			text: "Descriptive hints, not part of the LIX score — structure and cohesion are a separate axis the formulas miss.",
-			cls: "rc-footnote",
-		});
+		root.createEl("p", { text: t.footnoteStructure, cls: "rc-footnote" });
 	}
 
 	// --- Shared list sections ---------------------------------------------------
 
-	private renderParagraphs(root: HTMLElement, paragraphs: ParagraphSpan[]): void {
+	private renderParagraphs(
+		root: HTMLElement,
+		paragraphs: ParagraphSpan[],
+		t: Strings,
+	): void {
 		if (paragraphs.length === 0) return;
 		const budget = this.listBudget();
-		root.createDiv({ text: "Hardest paragraphs", cls: "rc-section-title" });
+		root.createDiv({ text: t.hardestParagraphs, cls: "rc-section-title" });
 		const list = root.createEl("ol", { cls: "rc-sentences" });
 		for (const paragraph of paragraphs.slice(0, budget)) {
 			const item = list.createEl("li", { cls: "rc-sentence" });
 			item.createSpan({
-				text: `LIX ${formatLixValue(paragraph.lix)} · ${paragraph.words} w · `,
+				text: t.paragraphPrefix(formatLixValue(paragraph.lix), paragraph.words),
 				cls: "rc-sentence-words",
 			});
 			item.createSpan({ text: truncate(paragraph.text, 140) });
-			item.setAttribute("title", "Click to jump to this paragraph");
+			item.setAttribute("title", t.clickToJumpParagraph);
 			this.registerDomEvent(item, "click", () => {
 				void this.plugin.jumpToSpan(paragraph);
 			});
 		}
-		this.renderShowMore(root, paragraphs.length - budget);
+		this.renderShowMore(root, paragraphs.length - budget, t);
 	}
 
 	/**
@@ -398,32 +421,36 @@ export class ReadabilityPanelView extends ItemView {
 	 * sentences — even across two files — can never resolve to the wrong one
 	 * (BC_E1_S16). One min-words filter, one place.
 	 */
-	private renderSentenceList(root: HTMLElement, entries: SentenceListEntry[]): void {
+	private renderSentenceList(
+		root: HTMLElement,
+		entries: SentenceListEntry[],
+		t: Strings,
+	): void {
 		const minWords = Math.max(1, this.plugin.settings.sentenceMinWords);
 		const offenders = entries.filter((entry) => entry.span.words > minWords);
 		if (offenders.length === 0) return;
 		const budget = this.listBudget();
-		root.createDiv({ text: "Longest sentences", cls: "rc-section-title" });
+		root.createDiv({ text: t.longestSentences, cls: "rc-section-title" });
 		const list = root.createEl("ol", { cls: "rc-sentences" });
 		for (const entry of offenders.slice(0, budget)) {
 			const item = list.createEl("li", { cls: "rc-sentence" });
 			item.createSpan({
-				text: `${entry.span.words} w · ${entry.label !== null ? `${entry.label} · ` : ""}`,
+				text: t.sentencePrefix(entry.span.words, entry.label),
 				cls: "rc-sentence-words",
 			});
 			item.createSpan({ text: truncate(entry.span.text, 140) });
-			item.setAttribute("title", "Click to jump to this sentence");
+			item.setAttribute("title", t.clickToJumpSentence);
 			this.registerDomEvent(item, "click", () => {
 				entry.onSelect();
 			});
 		}
-		this.renderShowMore(root, offenders.length - budget);
+		this.renderShowMore(root, offenders.length - budget, t);
 	}
 
-	private renderShowMore(root: HTMLElement, hidden: number): void {
+	private renderShowMore(root: HTMLElement, hidden: number, t: Strings): void {
 		if (hidden <= 0) return;
 		const button = root.createEl("button", {
-			text: `Show more (${hidden} hidden)`,
+			text: t.showMore(hidden),
 			cls: "rc-show-more",
 		});
 		this.registerDomEvent(button, "click", () => {
@@ -439,43 +466,6 @@ function truncate(text: string, max: number): string {
 	return text.length <= max ? text : text.slice(0, max - 1).trimEnd() + "…";
 }
 
-const SHAPE_PHRASE: Record<DiataxisCluster, string> = {
-	procedural: "Step-by-step",
-	reference: "Scannable, reference-style",
-	explanation: "Flowing prose",
-	mixed: "Mixed structure",
-};
-
-/**
- * A one-line, synthesized characterization of the note's shape — the automated
- * "conclusion" over the raw structure numbers. Stays descriptive (never a
- * pass/fail verdict): it names the shape and flags the notable observations.
- */
-function structureConclusion(s: StructureReport): string {
-	const flags: string[] = [];
-	if (s.cohesion !== null && s.cohesion < 0.15) {
-		flags.push("loosely connected (topics shift between sentences)");
-	} else if (s.cohesion !== null && s.cohesion >= 0.4) {
-		flags.push("tightly connected");
-	}
-	if (s.sections.wallOfText > 0) {
-		flags.push(
-			`${s.sections.wallOfText} long section${s.sections.wallOfText > 1 ? "s" : ""} without subheadings`,
-		);
-	}
-	if (s.headings.skips) flags.push("a heading level is skipped");
-	if (s.headings.count === 0 && s.sections.longestWords > 200) {
-		flags.push("no headings to signal structure");
-	}
-
-	if (s.diataxis !== null) {
-		const d = s.diataxis;
-		const lead = d.matches
-			? `Structure matches the declared '${d.declared}'`
-			: `Declared '${d.declared}', but reads as ${SHAPE_PHRASE[d.looksLike].toLowerCase()}`;
-		return flags.length > 0 ? `${lead} — ${flags.join("; ")}` : lead;
-	}
-
-	const lead = SHAPE_PHRASE[s.shape];
-	return flags.length > 0 ? `${lead} — ${flags.join("; ")}` : `${lead}, well connected`;
-}
+// The structure conclusion moved into the string catalogues (BC_E1_S28): the
+// sentence is grammar-bound, so each language composes it from the model in
+// `structureConclusionModel()` rather than from translated fragments.

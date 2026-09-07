@@ -1,10 +1,14 @@
 /**
  * Pure text formatting for the status bar, notices and the insertable report.
  * Kept free of Obsidian imports so it is unit-testable.
+ *
+ * Every function takes the string catalogue as its last argument (BC_E1_S28),
+ * defaulting to English so a caller that has no note context stays correct.
  */
 
 import { ReadabilityReport } from "./readability/analyze";
 import { ResolvedTarget } from "./readability/target-profile";
+import { EN, Strings, TargetSourceKind } from "./i18n";
 
 export interface StatusBarSegments {
 	lix: boolean;
@@ -21,26 +25,31 @@ export function formatTargetBand(target: ResolvedTarget): string {
 		: `≈ ${target.band.toUpperCase()}`;
 }
 
-/** Where the active target comes from, e.g. "folder blog/" or "global setting". */
-export function formatTargetSource(target: ResolvedTarget): string {
+/** The target's origin as data, so each language can word it itself. */
+function targetSourceKind(target: ResolvedTarget): TargetSourceKind {
 	switch (target.source) {
 		case "note":
-			return "note front matter";
+			return { kind: "note" };
 		case "diataxis":
-			return target.detail ?? "diataxis type";
+			return { kind: "diataxis", detail: target.detail };
 		case "tag":
-			return `tag ${target.detail ?? ""}`.trim();
+			return { kind: "tag", detail: target.detail ?? "" };
 		case "folder":
-			return `folder ${target.detail ?? ""}`.trim();
+			return { kind: "folder", detail: target.detail ?? "" };
 		case "global":
-			return "global setting";
+			return { kind: "global" };
 	}
 }
 
+/** Where the active target comes from, e.g. "folder blog/" or "global setting". */
+export function formatTargetSource(target: ResolvedTarget, t: Strings = EN): string {
+	return t.targetSource(targetSourceKind(target));
+}
+
 /** Compact suffix for notices/callouts; empty for the global setting. */
-function targetSourceSuffix(target: ResolvedTarget | null): string {
+function targetSourceSuffix(target: ResolvedTarget | null, t: Strings): string {
 	if (target === null || target.source === "global") return "";
-	return ` · ${formatTargetSource(target)}`;
+	return ` · ${formatTargetSource(target, t)}`;
 }
 
 export interface SelectionStats {
@@ -73,9 +82,10 @@ export function formatStatusBarText(
 	selection: SelectionStats | null,
 	segments: StatusBarSegments,
 	target: ResolvedTarget | null = null,
+	t: Strings = EN,
 ): string {
 	if (selection !== null) {
-		const parts = [`${selection.words} w selected`];
+		const parts = [t.wordsSelected(selection.words)];
 		if (selection.lix !== null && segments.lix) {
 			parts.push(`LIX ${formatLixValue(selection.lix)}`);
 		}
@@ -114,30 +124,41 @@ export function formatNoticeText(
 	report: ReadabilityReport,
 	title: string,
 	targetInfo: ResolvedTarget | null = null,
+	t: Strings = EN,
 ): string {
 	const lines: string[] = [title];
 	if (report.lix === null) {
-		lines.push(
-			`Too short for a stable score (min ${report.minWords} words; found ${report.words}).`,
-		);
+		lines.push(t.noticeTooShort(report.minWords, report.words));
 	} else {
+		const suffix = targetSourceSuffix(targetInfo, t);
 		const target = report.onTarget
-			? `on target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})`
-			: `above target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})`;
+			? t.noticeTargetOn(report.targetMaxLix, suffix)
+			: t.noticeTargetAbove(report.targetMaxLix, suffix);
+		const band = report.band === null ? "" : t.lixBand[report.band];
 		lines.push(
-			`LIX ${formatLixValue(report.lix)} (${report.band ?? ""}) · ${report.cefr ?? ""} · ${target}`,
+			`LIX ${formatLixValue(report.lix)} (${band}) · ${report.cefr ?? ""} · ${target}`,
 		);
 	}
 	lines.push(
-		`${report.words} words · ${report.sentences} sentences · ` +
-			`${report.avgWordsPerSentence.toFixed(1)} words/sentence`,
+		t.noticeCounts(
+			report.words,
+			report.sentences,
+			report.avgWordsPerSentence.toFixed(1),
+		),
 	);
 	lines.push(
-		`${formatPercent(report.longWordRatio)} long words · ${formatReadingTime(report.readingMinutes)} read`,
+		t.noticeLongWords(
+			formatPercent(report.longWordRatio),
+			formatReadingTime(report.readingMinutes),
+		),
 	);
 	if (report.flesch !== null) {
 		lines.push(
-			`${report.flesch.name} ${Math.round(report.flesch.score)} (${report.flesch.label})`,
+			t.fleschLine(
+				report.flesch.name,
+				Math.round(report.flesch.score),
+				t.fleschLabel[report.flesch.label],
+			),
 		);
 	}
 	return lines.join("\n");
@@ -148,29 +169,38 @@ export function formatCalloutReport(
 	report: ReadabilityReport,
 	dateIso: string,
 	targetInfo: ResolvedTarget | null = null,
+	t: Strings = EN,
 ): string {
-	const lines: string[] = [`> [!info] Readability — ${dateIso}`];
+	const lines: string[] = [`> [!info] ${t.calloutTitle(dateIso)}`];
 	if (report.lix === null) {
-		lines.push(
-			`> Too short for a stable score (min ${report.minWords} words; found ${report.words}).`,
-		);
+		lines.push(`> ${t.noticeTooShort(report.minWords, report.words)}`);
 	} else {
+		const suffix = targetSourceSuffix(targetInfo, t);
 		const target = report.onTarget
-			? `on target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})`
-			: `above target (max ${report.targetMaxLix}${targetSourceSuffix(targetInfo)})`;
+			? t.noticeTargetOn(report.targetMaxLix, suffix)
+			: t.noticeTargetAbove(report.targetMaxLix, suffix);
+		const band = report.band === null ? "" : t.lixBand[report.band];
 		lines.push(
-			`> **LIX ${formatLixValue(report.lix)}** (${report.band ?? ""}) · ${report.cefr ?? ""} · ${target}`,
+			`> **LIX ${formatLixValue(report.lix)}** (${band}) · ${report.cefr ?? ""} · ${target}`,
 		);
 	}
 	lines.push(
-		`> ${report.words} words · ${report.sentences} sentences · ` +
-			`${report.avgWordsPerSentence.toFixed(1)} words/sentence · ` +
-			`${formatPercent(report.longWordRatio)} long words · ` +
-			`${formatReadingTime(report.readingMinutes)} read`,
+		`> ${t.noticeCounts(
+			report.words,
+			report.sentences,
+			report.avgWordsPerSentence.toFixed(1),
+		)} · ${t.noticeLongWords(
+			formatPercent(report.longWordRatio),
+			formatReadingTime(report.readingMinutes),
+		)}`,
 	);
 	if (report.flesch !== null) {
 		lines.push(
-			`> ${report.flesch.name} ${Math.round(report.flesch.score)} (${report.flesch.label})`,
+			`> ${t.fleschLine(
+				report.flesch.name,
+				Math.round(report.flesch.score),
+				t.fleschLabel[report.flesch.label],
+			)}`,
 		);
 	}
 	return lines.join("\n") + "\n";

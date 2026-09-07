@@ -56,6 +56,41 @@ export interface StructureReport {
 	diataxis: DiataxisFit | null;
 }
 
+/**
+ * The observations behind the one-line structure conclusion, as data (BC_E1_S28).
+ *
+ * The conclusion sentence itself is grammar-bound (pluralization, joining,
+ * casing), so each UI language composes it from this model instead of gluing
+ * translated fragments together.
+ */
+export interface StructureConclusionModel {
+	/** The note's own shape; the lead phrase when no Diátaxis type is declared. */
+	shape: DiataxisCluster;
+	/** Only the two ends of the scale are worth naming; null in between. */
+	cohesion: "loose" | "tight" | null;
+	/** Long sections without a subheading; 0 when there are none. */
+	wallOfText: number;
+	headingSkip: boolean;
+	/** A long note with no headings at all. */
+	noHeadings: boolean;
+	diataxis: DiataxisFit | null;
+}
+
+/** Reduce a structure report to the observations the conclusion names. */
+export function structureConclusionModel(
+	s: StructureReport,
+): StructureConclusionModel {
+	return {
+		shape: s.shape,
+		cohesion:
+			s.cohesion === null ? null : s.cohesion < 0.15 ? "loose" : s.cohesion >= 0.4 ? "tight" : null,
+		wallOfText: s.sections.wallOfText,
+		headingSkip: s.headings.skips,
+		noHeadings: s.headings.count === 0 && s.sections.longestWords > 200,
+		diataxis: s.diataxis,
+	};
+}
+
 export interface StructureOptions {
 	/** Detected (or fixed) language; drives connective density and stopwords. */
 	language: DetectedLanguage;

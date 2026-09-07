@@ -1,12 +1,15 @@
 import { App, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
 import { TargetBand, TARGET_MAX_LIX } from "./readability/scores";
-import { LanguageCode, LANGUAGES } from "./readability/language";
+import { LanguageCode, LANGUAGES, LANGUAGE_BY_CODE } from "./readability/language";
+import { PanelLanguage, UI_LANGUAGES } from "./i18n";
 import { TargetRule } from "./readability/target-profile";
 import { DEFAULT_PROPERTY_PREFIX, isValidPropertyPrefix } from "./bases-properties";
 import type ReadabilityCompassPlugin from "./main";
 
 export interface ReadabilityCompassSettings {
 	language: "auto" | LanguageCode;
+	/** Which language the feedback speaks; "auto" follows the note (BC_E1_S28). */
+	panelLanguage: PanelLanguage;
 	targetBand: TargetBand;
 	customMaxLix: number;
 	deriveFromDiataxis: boolean;
@@ -39,6 +42,7 @@ export interface ReadabilityCompassSettings {
 
 export const DEFAULT_SETTINGS: ReadabilityCompassSettings = {
 	language: "auto",
+	panelLanguage: "auto",
 	targetBand: "b2",
 	customMaxLix: 45,
 	deriveFromDiataxis: true,
@@ -114,6 +118,15 @@ export class ReadabilityCompassSettingTab extends PluginSettingTab {
 		for (const language of LANGUAGES) {
 			languageOptions[language.code] = language.label;
 		}
+		// Only offer languages the feedback layer is actually translated into —
+		// the list grows as translations land (BC_E1_S28).
+		const panelLanguageOptions: Record<string, string> = {
+			auto: "Follow note",
+			obsidian: "Follow Obsidian's language",
+		};
+		for (const code of UI_LANGUAGES) {
+			panelLanguageOptions[code] = LANGUAGE_BY_CODE.get(code)?.label ?? code;
+		}
 		return [
 			{
 				type: "group",
@@ -188,6 +201,15 @@ export class ReadabilityCompassSettingTab extends PluginSettingTab {
 							type: "dropdown",
 							key: "language",
 							options: languageOptions,
+						},
+					},
+					{
+						name: "Feedback language",
+						desc: "The language the panel, tooltips and notices speak. Follow note uses the language detected in the note itself, falling back to English when a note is too short to tell or when several notes are scored together. Follow Obsidian's language keeps the feedback in the same language as the rest of the app. Or pick one language to pin it. Only translated languages are listed; anything else reads English.",
+						control: {
+							type: "dropdown",
+							key: "panelLanguage",
+							options: panelLanguageOptions,
 						},
 					},
 					{

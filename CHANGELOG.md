@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.0]
+
+**The feedback now speaks the language you write in — starting with Dutch.**
+
+- **The panel follows your note.** Write a note in Dutch and the panel, the status bar
+  tooltip and the notices answer in Dutch; write in English and they answer in English.
+  The plugin already detected the language of every note for its Flesch variant — now the
+  feedback itself follows that same signal.
+- **Dutch is the first translation** next to English. The other eight register languages
+  keep getting English feedback for now: a machine-translated readability vocabulary would
+  undermine exactly the thing this plugin is for, so a language ships only once someone can
+  check it. English is a deliberate fallback, not a gap.
+- **You stay in charge.** A new setting, *Feedback language*, defaults to *Follow note*.
+  It can also follow **Obsidian's own interface language**, so the feedback matches the rest
+  of the app, or be pinned to one language outright — useful in a mixed-language vault. A
+  note too short to identify, several notes scored together, or an app language we have no
+  translation for all fall back to English rather than guessing.
+- The report you insert into a note follows that note's language too. Settings and command
+  names stay English, matching the rest of Obsidian.
+- Under the hood: readability bands are stored in your note properties in their canonical
+  English form, so any Bases views and filters you built keep working unchanged.
+
 ## [0.9.1]
 
 **The cohesion signal now speaks all ten languages — and the README caught up.**

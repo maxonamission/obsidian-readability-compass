@@ -59,11 +59,25 @@ export function targetMaxLix(band: TargetBand, customMaxLix: number): number {
 	return band === "custom" ? customMaxLix : TARGET_MAX_LIX[band];
 }
 
+/**
+ * Canonical (English) Flesch band keys. Like `LixBand` these are *keys*, not
+ * display text: they are written to front matter by `bases-properties.ts` and
+ * translated only at render time (BC_E1_S28).
+ */
+export type FleschLabel =
+	| "very easy"
+	| "easy"
+	| "fairly easy"
+	| "plain"
+	| "fairly difficult"
+	| "difficult"
+	| "very difficult";
+
 export interface FleschResult {
 	/** Display name of the published variant (e.g. "Flesch-Douma"). */
 	name: string;
 	score: number;
-	label: string;
+	label: FleschLabel;
 }
 
 /**
@@ -82,7 +96,7 @@ export function fleschScore(
 	);
 }
 
-export function fleschLabel(score: number): string {
+export function fleschLabel(score: number): FleschLabel {
 	if (score >= 90) return "very easy";
 	if (score >= 80) return "easy";
 	if (score >= 70) return "fairly easy";

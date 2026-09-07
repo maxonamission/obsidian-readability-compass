@@ -2,6 +2,7 @@ import {
 	debounce,
 	Editor,
 	getAllTags,
+	getLanguage,
 	MarkdownView,
 	Notice,
 	Platform,
@@ -23,6 +24,8 @@ import {
 	propertyKeys,
 } from "./bases-properties";
 import { longSentenceExtension } from "./editor-highlight";
+import { resolvePanelStrings, Strings } from "./i18n";
+import { DetectedLanguage } from "./readability/language";
 import {
 	formatCalloutReport,
 	formatNoticeText,
@@ -86,7 +89,7 @@ export default class ReadabilityCompassPlugin extends Plugin {
 
 		this.statusBarEl = this.addStatusBarItem();
 		this.statusBarEl.addClass("rc-status", "mod-clickable");
-		this.statusBarEl.setAttribute("aria-label", "Readability — click for details");
+		this.statusBarEl.setAttribute("aria-label", this.strings(null).statusAria);
 		this.registerDomEvent(this.statusBarEl, "click", () => {
 			void this.activatePanel();
 		});
@@ -193,6 +196,23 @@ export default class ReadabilityCompassPlugin extends Plugin {
 		await this.saveData(this.settings);
 		this.syncEditorExtensions();
 		this.refreshUi();
+	}
+
+	/**
+	 * The feedback language for a note (BC_E1_S28). Pass the note's detected
+	 * language, or null when there is no single note speaking — the resolver
+	 * then falls back to English unless the user pinned a language.
+	 *
+	 * The single place that reads Obsidian's own interface language, so the
+	 * i18n module itself stays Obsidian-free.
+	 */
+	strings(detected: DetectedLanguage | null): Strings {
+		return resolvePanelStrings(
+			this.settings.panelLanguage,
+			this.settings.language,
+			detected,
+			getLanguage(),
+		);
 	}
 
 	/** (Un)install the editor marking; updateOptions rebuilds the editors. */
@@ -386,18 +406,22 @@ export default class ReadabilityCompassPlugin extends Plugin {
 			this.statusBarEl.hide();
 			return;
 		}
+		const t = this.strings(report?.language ?? null);
 		const text = formatStatusBarText(
 			report,
 			this.selectionStats(view, target),
 			this.settings.statusBar,
 			target,
+			t,
 		);
 		this.statusBarEl.setText(text);
 		this.statusBarEl.setAttribute(
 			"aria-label",
-			`Readability — target ${formatTargetBand(target)} (LIX ≤ ${Math.round(
-				target.maxLix,
-			)}) from ${formatTargetSource(target)} — click for details`,
+			t.statusAriaWithTarget(
+				formatTargetBand(target),
+				Math.round(target.maxLix),
+				formatTargetSource(target, t),
+			),
 		);
 		if (text === "") {
 			this.statusBarEl.hide();
@@ -535,9 +559,7 @@ export default class ReadabilityCompassPlugin extends Plugin {
 		for (const file of files) {
 			if (await this.updateReadabilityProperties(file)) updated++;
 		}
-		new Notice(
-			`Readability properties: ${updated} of ${files.length} notes updated.`,
-		);
+		new Notice(this.strings(null).propertiesBatch(updated, files.length));
 	}
 
 	/** An open note's live editor buffer (ahead of disk while editing); else the vault copy. */
@@ -745,11 +767,8 @@ export default class ReadabilityCompassPlugin extends Plugin {
 				if (!this.settings.basesWriteEnabled || file === null) return false;
 				if (!checking) {
 					void this.updateReadabilityProperties(file).then((changed) => {
-						new Notice(
-							changed
-								? "Readability properties updated."
-								: "Readability properties already up to date.",
-						);
+						const t = this.strings(null);
+						new Notice(changed ? t.propertiesUpdated : t.propertiesUnchanged);
 					});
 				}
 				return true;
@@ -783,11 +802,13 @@ export default class ReadabilityCompassPlugin extends Plugin {
 				if (!checking) {
 					const target = this.resolveTargetFor(view.file);
 					const report = this.analyzeView(view, target);
+					const t = this.strings(report.language);
 					new Notice(
 						formatNoticeText(
 							report,
-							view.file?.basename ?? "Current note",
+							view.file?.basename ?? t.noticeTitleCurrentNote,
 							target,
+							t,
 						),
 						10000,
 					);
@@ -810,7 +831,11 @@ export default class ReadabilityCompassPlugin extends Plugin {
 						text,
 						this.selectionAnalyzeOptions(target),
 					);
-					new Notice(formatNoticeText(report, "Selection", target), 10000);
+					const t = this.strings(report.language);
+					new Notice(
+						formatNoticeText(report, t.noticeTitleSelection, target, t),
+						10000,
+					);
 				}
 				return true;
 			},
@@ -827,7 +852,10 @@ export default class ReadabilityCompassPlugin extends Plugin {
 					this.analyzeOptions(target, file),
 				);
 				const date = new Date().toISOString().slice(0, 10);
-				editor.replaceSelection(formatCalloutReport(report, date, target));
+				// The callout lands *inside* the note, so it speaks the note's language.
+				editor.replaceSelection(
+					formatCalloutReport(report, date, target, this.strings(report.language)),
+				);
 			},
 		});
 
